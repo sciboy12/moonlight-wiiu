@@ -33,6 +33,7 @@ static OSFastMutex queueMutex;
 static yuv_texture_t* queueMessages[MAX_QUEUEMESSAGES];
 static uint32_t queueWriteIndex;
 static uint32_t queueReadIndex;
+static uint32_t droppedFrames;
 
 void wiiu_stream_init(uint32_t width, uint32_t height)
 {
@@ -40,6 +41,7 @@ void wiiu_stream_init(uint32_t width, uint32_t height)
 
   OSFastMutex_Init(&queueMutex, "");
   queueReadIndex = queueWriteIndex = 0;
+  droppedFrames = 0;
 
   if (!WHBGfxLoadGFDShaderGroup(&shaderGroup, 0, display_gsh)) {
     printf("Cannot load shader\n");
@@ -179,6 +181,9 @@ void add_frame(yuv_texture_t* msg)
 
   uint32_t elements_in = queueWriteIndex - queueReadIndex;
   if (elements_in == MAX_QUEUEMESSAGES) {
+    if ((++droppedFrames % 120) == 0) {
+      printf("Video frame queue overflow (%u drops). Stream bitrate is too high for current decode/render throughput.\n", droppedFrames);
+    }
     OSFastMutex_Unlock(&queueMutex);
     return; // framequeue is full
   }
