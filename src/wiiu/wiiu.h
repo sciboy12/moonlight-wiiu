@@ -35,7 +35,7 @@ void wiiu_stream_draw(void);
 void wiiu_stream_fini(void);
 void wiiu_setup_renderstate(void);
 
-#define NUM_BUFFERS 2
+#define NUM_BUFFERS 8
 #define MAX_QUEUEMESSAGES NUM_BUFFERS
 
 typedef struct {
