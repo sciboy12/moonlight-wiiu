@@ -181,11 +181,11 @@ void add_frame(yuv_texture_t* msg)
 
   uint32_t elements_in = queueWriteIndex - queueReadIndex;
   if (elements_in == MAX_QUEUEMESSAGES) {
+    // Queue is full, drop the oldest frame so we can keep the latest decode output.
+    queueReadIndex++;
     if ((++droppedFrames % 120) == 0) {
-      printf("Video frame queue overflow (%u drops). Stream bitrate is too high for current decode/render throughput.\n", droppedFrames);
+      printf("Video frame queue overflow (%u drops). Dropping old frames to keep stream responsive.\n", droppedFrames);
     }
-    OSFastMutex_Unlock(&queueMutex);
-    return; // framequeue is full
   }
 
   uint32_t i = (queueWriteIndex)++ & (MAX_QUEUEMESSAGES - 1);

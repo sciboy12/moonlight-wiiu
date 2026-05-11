@@ -36,7 +36,7 @@ void wiiu_stream_fini(void);
 void wiiu_setup_renderstate(void);
 
 #define NUM_BUFFERS 2
-#define MAX_QUEUEMESSAGES 16
+#define MAX_QUEUEMESSAGES NUM_BUFFERS
 
 typedef struct {
   GX2Texture yTex;
