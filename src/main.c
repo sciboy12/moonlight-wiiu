@@ -42,7 +42,7 @@
 #include "wiiu/wiiu.h"
 #include <whb/gfx.h>
 #include <vpad/input.h>
-#include <coreinit/time.h>
+#include <coreinit/thread.h>
 
 #ifdef DEBUG
 void Debug_Init();
