@@ -21,7 +21,9 @@
 #define H264_FRAME_HEIGHT(h) (((h) + 0xf) & ~0xf)
 #define H264_MAX_FRAME_SIZE H264_FRAME_SIZE(H264_FRAME_PITCH(2800), 1408)
 
-#define DECODER_BUFFER_SIZE 92*1024
+// High bitrate streams can produce large decode units (IDR frames in particular).
+// Keep ample room to avoid dropping oversized units and desynchronizing decode state.
+#define DECODER_BUFFER_SIZE (512 * 1024)
 
 yuv_texture_t textures[NUM_BUFFERS];
 uint32_t currentTexture;
@@ -161,8 +163,9 @@ static void wiiu_decoder_cleanup() {
 
 static int wiiu_decoder_submit_decode_unit(PDECODE_UNIT decodeUnit) {
   if (decodeUnit->fullLength > DECODER_BUFFER_SIZE) {
-    fprintf(stderr, "Video decode buffer too small\n");
-    return DR_OK;
+    fprintf(stderr, "Video decode buffer too small (%u > %u)\n",
+            decodeUnit->fullLength, DECODER_BUFFER_SIZE);
+    return DR_NEED_IDR;
   }
 
   PLENTRY entry = decodeUnit->bufferList;
