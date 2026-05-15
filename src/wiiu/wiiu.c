@@ -97,7 +97,7 @@ void wiiu_stream_init(uint32_t width, uint32_t height)
   GX2Invalidate(GX2_INVALIDATE_MODE_CPU_ATTRIBUTE_BUFFER, drcAttribs, ATTRIB_SIZE);
 }
 
-void wiiu_stream_draw(void)
+int wiiu_stream_draw(void)
 {
   yuv_texture_t* tex = get_frame();
   if (tex) {
@@ -147,7 +147,10 @@ void wiiu_stream_draw(void)
 
       WHBGfxFinishRender();
     }
+    return 1;
   }
+
+  return 0;
 }
 
 void wiiu_stream_fini(void)

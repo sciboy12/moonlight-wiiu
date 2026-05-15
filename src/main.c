@@ -369,7 +369,9 @@ int main(int argc, char* argv[]) {
         break;
       }
       case STATE_STREAMING: {
-        wiiu_stream_draw();
+        if (!wiiu_stream_draw()) {
+          OSSleepTicks(OSMillisecondsToTicks(1));
+        }
         break;
       }
       case STATE_STOP_STREAM: {
