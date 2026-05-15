@@ -42,6 +42,8 @@
 #include "wiiu/wiiu.h"
 #include <whb/gfx.h>
 #include <vpad/input.h>
+#include <coreinit/thread.h>
+#include <coreinit/time.h>
 
 #ifdef DEBUG
 void Debug_Init();
@@ -384,6 +386,10 @@ int main(int argc, char* argv[]) {
         state = STATE_DISCONNECTED;
         break;
       }
+    }
+
+    if (state != STATE_STREAMING) {
+      OSSleepTicks(OSMillisecondsToTicks(16));
     }
   }
 
