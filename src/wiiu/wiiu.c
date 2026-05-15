@@ -101,10 +101,11 @@ int wiiu_stream_draw(void)
 {
   yuv_texture_t* tex = get_frame();
   if (tex) {
-    if (++currentFrame <= nextFrame - NUM_BUFFERS) {
-      // display thread is behind decoder, skip frame
-    }
-    else {
+    uint32_t backlog = nextFrame - currentFrame;
+    if (backlog > NUM_BUFFERS) {
+      // display thread is behind decoder, skip this old frame
+      currentFrame++;
+    } else {
       WHBGfxBeginRender();
 
       // TV
@@ -146,6 +147,7 @@ int wiiu_stream_draw(void)
       WHBGfxFinishRenderDRC();
 
       WHBGfxFinishRender();
+      currentFrame++;
     }
     return 1;
   }
