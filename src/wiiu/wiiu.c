@@ -36,7 +36,7 @@ static uint32_t queueWriteIndex;
 static uint32_t queueReadIndex;
 static uint32_t droppedFrames;
 static uint64_t lastQueueLogMs;
-static uint64_t lastRenderTimingLogMs;
+static uint64_t lastRenderWarnMs;
 
 static uint64_t now_ms(void)
 {
@@ -51,6 +51,7 @@ void wiiu_stream_init(uint32_t width, uint32_t height)
   queueReadIndex = queueWriteIndex = 0;
   droppedFrames = 0;
   lastQueueLogMs = 0;
+  lastRenderWarnMs = 0;
 
   if (!WHBGfxLoadGFDShaderGroup(&shaderGroup, 0, display_gsh)) {
     printf("Cannot load shader\n");
@@ -173,23 +174,17 @@ int wiiu_stream_draw(void)
 
       uint64_t gpuMs = gpuEndMs - gpuStartMs;
       uint64_t frameMs = renderEndMs - renderStartMs;
-      if (frameMs > 33 || gpuMs > 10) {
+      if ((frameMs > 33 || gpuMs > 25) && (renderEndMs - lastRenderWarnMs > 2000)) {
         printf("Render timing warning: frame=%llums gpu=%llums backlog=%u queueDepth=%u decoded=%u rendered=%u\n",
                frameMs, gpuMs, backlog, wiiu_stream_queue_depth(), nextFrame, currentFrame);
-      } else if (frameMs > 16) {
-        uint64_t now = now_ms();
-        if (now - lastRenderTimingLogMs > 1000) {
-          printf("Render pacing drift: frame=%llums gpu=%llums backlog=%u queueDepth=%u\n",
-                 frameMs, gpuMs, backlog, wiiu_stream_queue_depth());
-          lastRenderTimingLogMs = now;
-        }
+        lastRenderWarnMs = renderEndMs;
       }
     }
     return 1;
   }
 
   uint64_t nowMs = now_ms();
-  if (nextFrame > currentFrame && nowMs - lastQueueLogMs > 1000) {
+  if (nextFrame > currentFrame && nowMs - lastQueueLogMs > 5000) {
     printf("Video render starvation: decoded=%u rendered=%u queueDepth=%u\n",
            nextFrame, currentFrame, wiiu_stream_queue_depth());
     lastQueueLogMs = nowMs;
@@ -211,7 +206,7 @@ void* get_frame(void)
   uint64_t lockStartMs = now_ms();
   OSFastMutex_Lock(&queueMutex);
   uint64_t lockWaitMs = now_ms() - lockStartMs;
-  if (lockWaitMs > 5) {
+  if (lockWaitMs > 20) {
     printf("Queue lock wait (get_frame): %llums\n", lockWaitMs);
   }
 
@@ -233,7 +228,7 @@ void add_frame(yuv_texture_t* msg)
   uint64_t lockStartMs = now_ms();
   OSFastMutex_Lock(&queueMutex);
   uint64_t lockWaitMs = now_ms() - lockStartMs;
-  if (lockWaitMs > 5) {
+  if (lockWaitMs > 20) {
     printf("Queue lock wait (add_frame): %llums\n", lockWaitMs);
   }
 

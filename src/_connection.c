@@ -118,30 +118,34 @@ static void connection_log_message(const char* format, ...) {
   static uint32_t unrecoverableFrames = 0;
   static uint32_t idrWaitEvents = 0;
   static uint32_t idrRequests = 0;
+  static uint64_t lastControlLogMs = 0;
 
-  char logbuf[512];
   va_list arglist;
   va_start(arglist, format);
   vprintf(format, arglist);
   va_end(arglist);
 
-  va_start(arglist, format);
-  vsnprintf(logbuf, sizeof(logbuf), format, arglist);
-  va_end(arglist);
+  uint64_t nowMs = OSTicksToMilliseconds(OSGetTime());
+  if (lastControlLogMs != 0) {
+    uint64_t gapMs = nowMs - lastControlLogMs;
+    if (gapMs > 100) {
+      printf("Control/log callback gap: %llums\n", gapMs);
+    }
+  }
+  lastControlLogMs = nowMs;
 
-  if (strstr(logbuf, "Network dropped ") != NULL && strstr(logbuf, "frames") != NULL) {
+  if (strstr(format, "Network dropped ") != NULL && strstr(format, "frames") != NULL) {
     droppedFrameBursts++;
-  } else if (strstr(logbuf, "Network dropped audio data") != NULL) {
+  } else if (strstr(format, "Network dropped audio data") != NULL) {
     droppedAudioBursts++;
-  } else if (strstr(logbuf, "Unrecoverable frame") != NULL) {
+  } else if (strstr(format, "Unrecoverable frame") != NULL) {
     unrecoverableFrames++;
-  } else if (strstr(logbuf, "Waiting for IDR frame") != NULL) {
+  } else if (strstr(format, "Waiting for IDR frame") != NULL) {
     idrWaitEvents++;
-  } else if (strstr(logbuf, "IDR frame request sent") != NULL) {
+  } else if (strstr(format, "IDR frame request sent") != NULL) {
     idrRequests++;
   }
 
-  uint64_t nowMs = OSTicksToMilliseconds(OSGetTime());
   if (nowMs - lastNetDiagMs >= 1000) {
     if (droppedFrameBursts || droppedAudioBursts || unrecoverableFrames || idrWaitEvents || idrRequests) {
       printf("Net diag/s: dropBursts(video=%u audio=%u) unrecoverable=%u idr(wait=%u req=%u)\n",
