@@ -427,8 +427,6 @@ void config_parse(int argc, char* argv[], PCONFIGURATION config) {
   // TODO test how slow audio encryption is
   config->stream.encryptionFlags = ENCFLG_NONE;
   config->stream.fps = 30;
-  // Favor WAN-safe MTU by default on Wii U to reduce UDP fragmentation loss.
-  config->stream.packetSize = 1024;
 #endif
 
   config->debug_level = 0;
