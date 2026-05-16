@@ -84,6 +84,7 @@ static struct option long_options[] = {
   {"swap_buttons", no_argument, NULL, 'B'},
   {"autostream", no_argument, NULL, 'C'},
   {"mouse_mode", required_argument, NULL, 'D'},
+  {"filelog", no_argument, NULL, 'E'},
 #endif
   {"nomouseemulation", no_argument, NULL, '4'},
   {"pin", required_argument, NULL, '5'},
@@ -282,6 +283,9 @@ static void parse_argument(int c, char* value, PCONFIGURATION config) {
     else if (strcasecmp(value, "touchscreen") == 0)
       mouse_mode = MOUSE_MODE_TOUCHSCREEN;
     break;
+  case 'E':
+    config->filelog = true;
+    break;
 #endif
   case '4':
     config->mouse_emulation = false;
@@ -384,6 +388,8 @@ void config_save(char* filename, PCONFIGURATION config) {
     write_config_bool(fd, "viewonly", config->viewonly);
   if (config->rotate != 0)
     write_config_int(fd, "rotate", config->rotate);
+  if (config->filelog)
+    write_config_bool(fd, "filelog", config->filelog);
 
   if (strcmp(config->app, "Steam") != 0)
     write_config_string(fd, "app", config->app);
@@ -440,6 +446,7 @@ void config_parse(int argc, char* argv[], PCONFIGURATION config) {
   config->rotate = 0;
   config->codec = CODEC_UNSPECIFIED;
   config->hdr = false;
+  config->filelog = false;
   config->pin = 0;
   config->port = 47989;
 
