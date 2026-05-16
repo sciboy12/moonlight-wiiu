@@ -33,6 +33,7 @@ static OSFastMutex queueMutex;
 static yuv_texture_t* queueMessages[MAX_QUEUEMESSAGES];
 static uint32_t queueWriteIndex;
 static uint32_t queueReadIndex;
+static uint32_t droppedFrames;
 
 void wiiu_stream_init(uint32_t width, uint32_t height)
 {
@@ -40,6 +41,7 @@ void wiiu_stream_init(uint32_t width, uint32_t height)
 
   OSFastMutex_Init(&queueMutex, "");
   queueReadIndex = queueWriteIndex = 0;
+  droppedFrames = 0;
 
   if (!WHBGfxLoadGFDShaderGroup(&shaderGroup, 0, display_gsh)) {
     printf("Cannot load shader\n");
@@ -95,14 +97,15 @@ void wiiu_stream_init(uint32_t width, uint32_t height)
   GX2Invalidate(GX2_INVALIDATE_MODE_CPU_ATTRIBUTE_BUFFER, drcAttribs, ATTRIB_SIZE);
 }
 
-void wiiu_stream_draw(void)
+int wiiu_stream_draw(void)
 {
   yuv_texture_t* tex = get_frame();
   if (tex) {
-    if (++currentFrame <= nextFrame - NUM_BUFFERS) {
-      // display thread is behind decoder, skip frame
-    }
-    else {
+    uint32_t backlog = nextFrame - currentFrame;
+    if (backlog > NUM_BUFFERS) {
+      // display thread is behind decoder, skip this old frame
+      currentFrame++;
+    } else {
       WHBGfxBeginRender();
 
       // TV
@@ -144,8 +147,12 @@ void wiiu_stream_draw(void)
       WHBGfxFinishRenderDRC();
 
       WHBGfxFinishRender();
+      currentFrame++;
     }
+    return 1;
   }
+
+  return 0;
 }
 
 void wiiu_stream_fini(void)
@@ -179,8 +186,11 @@ void add_frame(yuv_texture_t* msg)
 
   uint32_t elements_in = queueWriteIndex - queueReadIndex;
   if (elements_in == MAX_QUEUEMESSAGES) {
-    OSFastMutex_Unlock(&queueMutex);
-    return; // framequeue is full
+    // Queue is full, drop the oldest frame so we can keep the latest decode output.
+    queueReadIndex++;
+    if ((++droppedFrames % 120) == 0) {
+      printf("Video frame queue overflow (%u drops). Dropping old frames to keep stream responsive.\n", droppedFrames);
+    }
   }
 
   uint32_t i = (queueWriteIndex)++ & (MAX_QUEUEMESSAGES - 1);

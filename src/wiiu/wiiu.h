@@ -31,12 +31,12 @@ extern char message_buffer[1024];
 #define FRAME_BUFFER 12
 
 void wiiu_stream_init(uint32_t width, uint32_t height);
-void wiiu_stream_draw(void);
+int wiiu_stream_draw(void);
 void wiiu_stream_fini(void);
 void wiiu_setup_renderstate(void);
 
-#define NUM_BUFFERS 2
-#define MAX_QUEUEMESSAGES 16
+#define NUM_BUFFERS 8
+#define MAX_QUEUEMESSAGES NUM_BUFFERS
 
 typedef struct {
   GX2Texture yTex;

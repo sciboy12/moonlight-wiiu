@@ -42,6 +42,8 @@
 #include "wiiu/wiiu.h"
 #include <whb/gfx.h>
 #include <vpad/input.h>
+#include <coreinit/thread.h>
+#include <coreinit/time.h>
 
 #ifdef DEBUG
 void Debug_Init();
@@ -367,7 +369,9 @@ int main(int argc, char* argv[]) {
         break;
       }
       case STATE_STREAMING: {
-        wiiu_stream_draw();
+        if (!wiiu_stream_draw()) {
+          OSSleepTicks(OSMillisecondsToTicks(1));
+        }
         break;
       }
       case STATE_STOP_STREAM: {
@@ -384,6 +388,10 @@ int main(int argc, char* argv[]) {
         state = STATE_DISCONNECTED;
         break;
       }
+    }
+
+    if (state != STATE_STREAMING) {
+      OSSleepTicks(OSMillisecondsToTicks(16));
     }
   }
 
