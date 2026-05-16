@@ -74,11 +74,15 @@ void wiiu_net_init(void)
 
 void wiiu_net_shutdown(void)
 {
+#ifdef SOMEMOPT_REQUEST_FINI
   if (netMemoryInitialized) {
     int rc = somemopt(SOMEMOPT_REQUEST_FINI, NULL, 0, SOMEMOPT_FLAGS_NONE);
     printf("SOMEMOPT_REQUEST_FINI: %d\n", rc);
     netMemoryInitialized = false;
   }
+#else
+  netMemoryInitialized = false;
+#endif
 
   if (netMemory != NULL) {
     free(netMemory);
