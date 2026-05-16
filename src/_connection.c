@@ -118,17 +118,9 @@ static void connection_log_message(const char* format, ...) {
   static uint32_t unrecoverableFrames = 0;
   static uint32_t idrWaitEvents = 0;
   static uint32_t idrRequests = 0;
-  static uint64_t lastControlLogMs = 0;
   bool noisyLine = false;
 
   uint64_t nowMs = OSTicksToMilliseconds(OSGetTime());
-  if (lastControlLogMs != 0) {
-    uint64_t gapMs = nowMs - lastControlLogMs;
-    if (gapMs > 100) {
-      printf("Control/log callback gap: %llums\n", gapMs);
-    }
-  }
-  lastControlLogMs = nowMs;
 
   if (strstr(format, "Network dropped ") != NULL && strstr(format, "frames") != NULL) {
     droppedFrameBursts++;

@@ -217,9 +217,13 @@ static int wiiu_decoder_submit_decode_unit(PDECODE_UNIT decodeUnit) {
   uint64_t nowMs = OSTicksToMilliseconds(OSGetTime());
   if (currentFrame != lastRenderedFrame) {
     lastRenderedFrame = currentFrame;
-  } else if (nowMs - lastProgressLogMs > 1000) {
-    printf("Video decode progressing but render stalled: decoded=%u rendered=%u queueDepth=%u fullLength=%u\n",
-           nextFrame, currentFrame, wiiu_stream_queue_depth(), decodeUnit->fullLength);
+  } else if (nowMs - lastProgressLogMs > 10000) {
+    uint32_t queueDepth = wiiu_stream_queue_depth();
+    uint32_t renderLag = nextFrame - currentFrame;
+    if (queueDepth >= 6 || renderLag >= 8) {
+      printf("Video decode/render lag: decoded=%u rendered=%u lag=%u queueDepth=%u fullLength=%u\n",
+             nextFrame, currentFrame, renderLag, queueDepth, decodeUnit->fullLength);
+    }
     lastProgressLogMs = nowMs;
   }
 
