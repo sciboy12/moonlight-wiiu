@@ -93,6 +93,18 @@ static void connection_terminated(int errorCode) {
 #endif
 }
 
+static void connection_stage_starting(int stage) {
+  printf("Connection stage starting: %d\n", stage);
+}
+
+static void connection_stage_complete(int stage) {
+  printf("Connection stage complete: %d\n", stage);
+}
+
+static void connection_stage_failed(int stage, int errorCode) {
+  printf("Connection stage failed: stage=%d error=%d\n", stage, errorCode);
+}
+
 static void connection_log_message(const char* format, ...) {
   va_list arglist;
   va_start(arglist, format);
@@ -132,9 +144,9 @@ static void connection_status_update(int status) {
 }
 
 CONNECTION_LISTENER_CALLBACKS connection_callbacks = {
-  .stageStarting = NULL,
-  .stageComplete = NULL,
-  .stageFailed = NULL,
+  .stageStarting = connection_stage_starting,
+  .stageComplete = connection_stage_complete,
+  .stageFailed = connection_stage_failed,
   .connectionStarted = NULL,
   .connectionTerminated = connection_terminated,
   .logMessage = connection_log_message,

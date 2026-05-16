@@ -187,8 +187,8 @@ static int wiiu_decoder_submit_decode_unit(PDECODE_UNIT decodeUnit) {
     entry = entry->next;
   }
 
-  if (length > decodeUnit->fullLength) {
-    fprintf(stderr, "Decode unit length mismatch (%zu > %u)\n", length, decodeUnit->fullLength);
+  if (length != decodeUnit->fullLength) {
+    fprintf(stderr, "Decode unit length mismatch (%zu != %u)\n", length, decodeUnit->fullLength);
     return DR_NEED_IDR;
   }
 
