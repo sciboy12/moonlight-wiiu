@@ -36,6 +36,12 @@ static uint32_t queueWriteIndex;
 static uint32_t queueReadIndex;
 static uint32_t droppedFrames;
 static uint64_t lastQueueLogMs;
+static uint64_t lastRenderTimingLogMs;
+
+static uint64_t now_ms(void)
+{
+  return OSTicksToMilliseconds(OSGetTime());
+}
 
 void wiiu_stream_init(uint32_t width, uint32_t height)
 {
@@ -111,6 +117,7 @@ void wiiu_stream_reset(void)
 
 int wiiu_stream_draw(void)
 {
+  uint64_t renderStartMs = now_ms();
   yuv_texture_t* tex = get_frame();
   if (tex) {
     uint32_t backlog = nextFrame - currentFrame;
@@ -118,6 +125,7 @@ int wiiu_stream_draw(void)
       // display thread is behind decoder, skip this old frame
       currentFrame++;
     } else {
+      uint64_t gpuStartMs = now_ms();
       WHBGfxBeginRender();
 
       // TV
@@ -158,13 +166,29 @@ int wiiu_stream_draw(void)
       
       WHBGfxFinishRenderDRC();
 
+      uint64_t gpuEndMs = now_ms();
       WHBGfxFinishRender();
+      uint64_t renderEndMs = now_ms();
       currentFrame++;
+
+      uint64_t gpuMs = gpuEndMs - gpuStartMs;
+      uint64_t frameMs = renderEndMs - renderStartMs;
+      if (frameMs > 33 || gpuMs > 10) {
+        printf("Render timing warning: frame=%llums gpu=%llums backlog=%u queueDepth=%u decoded=%u rendered=%u\n",
+               frameMs, gpuMs, backlog, wiiu_stream_queue_depth(), nextFrame, currentFrame);
+      } else if (frameMs > 16) {
+        uint64_t now = now_ms();
+        if (now - lastRenderTimingLogMs > 1000) {
+          printf("Render pacing drift: frame=%llums gpu=%llums backlog=%u queueDepth=%u\n",
+                 frameMs, gpuMs, backlog, wiiu_stream_queue_depth());
+          lastRenderTimingLogMs = now;
+        }
+      }
     }
     return 1;
   }
 
-  uint64_t nowMs = OSTicksToMilliseconds(OSGetTime());
+  uint64_t nowMs = now_ms();
   if (nextFrame > currentFrame && nowMs - lastQueueLogMs > 1000) {
     printf("Video render starvation: decoded=%u rendered=%u queueDepth=%u\n",
            nextFrame, currentFrame, wiiu_stream_queue_depth());
@@ -184,7 +208,12 @@ void wiiu_stream_fini(void)
 
 void* get_frame(void)
 {
+  uint64_t lockStartMs = now_ms();
   OSFastMutex_Lock(&queueMutex);
+  uint64_t lockWaitMs = now_ms() - lockStartMs;
+  if (lockWaitMs > 5) {
+    printf("Queue lock wait (get_frame): %llums\n", lockWaitMs);
+  }
 
   uint32_t elements_in = queueWriteIndex - queueReadIndex;
   if(elements_in == 0) {
@@ -201,7 +230,12 @@ void* get_frame(void)
 
 void add_frame(yuv_texture_t* msg)
 {
+  uint64_t lockStartMs = now_ms();
   OSFastMutex_Lock(&queueMutex);
+  uint64_t lockWaitMs = now_ms() - lockStartMs;
+  if (lockWaitMs > 5) {
+    printf("Queue lock wait (add_frame): %llums\n", lockWaitMs);
+  }
 
   uint32_t elements_in = queueWriteIndex - queueReadIndex;
   if (elements_in == MAX_QUEUEMESSAGES) {
