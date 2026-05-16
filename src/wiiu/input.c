@@ -358,7 +358,8 @@ uint32_t wiiu_input_buttons_triggered(void)
 
 static void alarm_callback(OSAlarm* alarm, OSContext* ctx)
 {
-  wiiu_input_update();
+  (void)alarm;
+  (void)ctx;
 }
 
 static int input_thread_proc(int argc, const char **argv)
@@ -368,7 +369,12 @@ static int input_thread_proc(int argc, const char **argv)
 
   while (thread_running) {
     OSWaitAlarm(&inputAlarm);
+    if (thread_running) {
+      wiiu_input_update();
+    }
   }
+
+  return 0;
 }
 
 static void thread_deallocator(OSThread *thread, void *stack)
