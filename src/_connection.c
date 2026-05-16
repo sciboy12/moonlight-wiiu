@@ -22,6 +22,10 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <signal.h>
+#include <string.h>
+#ifdef __WIIU__
+#include <coreinit/time.h>
+#endif
 
 #ifdef __WIIU__
 #include "wiiu/wiiu.h"
@@ -107,10 +111,55 @@ static void connection_stage_failed(int stage, int errorCode) {
 }
 
 static void connection_log_message(const char* format, ...) {
+#ifdef __WIIU__
+  static uint64_t lastNetDiagMs = 0;
+  static uint32_t droppedFrameBursts = 0;
+  static uint32_t droppedAudioBursts = 0;
+  static uint32_t unrecoverableFrames = 0;
+  static uint32_t idrWaitEvents = 0;
+  static uint32_t idrRequests = 0;
+
+  char logbuf[512];
   va_list arglist;
   va_start(arglist, format);
   vprintf(format, arglist);
   va_end(arglist);
+
+  va_start(arglist, format);
+  vsnprintf(logbuf, sizeof(logbuf), format, arglist);
+  va_end(arglist);
+
+  if (strstr(logbuf, "Network dropped ") != NULL && strstr(logbuf, "frames") != NULL) {
+    droppedFrameBursts++;
+  } else if (strstr(logbuf, "Network dropped audio data") != NULL) {
+    droppedAudioBursts++;
+  } else if (strstr(logbuf, "Unrecoverable frame") != NULL) {
+    unrecoverableFrames++;
+  } else if (strstr(logbuf, "Waiting for IDR frame") != NULL) {
+    idrWaitEvents++;
+  } else if (strstr(logbuf, "IDR frame request sent") != NULL) {
+    idrRequests++;
+  }
+
+  uint64_t nowMs = OSTicksToMilliseconds(OSGetTime());
+  if (nowMs - lastNetDiagMs >= 1000) {
+    if (droppedFrameBursts || droppedAudioBursts || unrecoverableFrames || idrWaitEvents || idrRequests) {
+      printf("Net diag/s: dropBursts(video=%u audio=%u) unrecoverable=%u idr(wait=%u req=%u)\n",
+             droppedFrameBursts, droppedAudioBursts, unrecoverableFrames, idrWaitEvents, idrRequests);
+      droppedFrameBursts = 0;
+      droppedAudioBursts = 0;
+      unrecoverableFrames = 0;
+      idrWaitEvents = 0;
+      idrRequests = 0;
+    }
+    lastNetDiagMs = nowMs;
+  }
+#else
+  va_list arglist;
+  va_start(arglist, format);
+  vprintf(format, arglist);
+  va_end(arglist);
+#endif
 }
 
 static void rumble(unsigned short controllerNumber, unsigned short lowFreqMotor, unsigned short highFreqMotor) {
