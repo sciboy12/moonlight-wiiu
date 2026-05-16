@@ -149,12 +149,13 @@ void handleTouch(VPADTouchData touch) {
     if (touch.touched) {
       // Holding & dragging screen, not just tapping
       if (millis() - touchDownMillis > TAP_MILLIS || touchDownMillis == 0) {
-        if (touch.x != last_x || touch.y != last_y) // Don't send extra data if we don't need to
+        if (touch.x != last_x || touch.y != last_y) { // Don't send extra data if we don't need to
           uint64_t now = millis();
           if (now - lastPointerEventMillis >= POINTER_EVENT_INTERVAL_MILLIS) {
             LiSendMouseMoveEvent(touch.x - last_x, touch.y - last_y);
             lastPointerEventMillis = now;
           }
+        }
         last_x = touch.x;
         last_y = touch.y;
       } else {
