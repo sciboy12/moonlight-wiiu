@@ -162,6 +162,11 @@ static void wiiu_decoder_cleanup() {
 }
 
 static int wiiu_decoder_submit_decode_unit(PDECODE_UNIT decodeUnit) {
+  if (decodeUnit == NULL || decodeUnit->bufferList == NULL) {
+    fprintf(stderr, "Invalid decode unit\n");
+    return DR_NEED_IDR;
+  }
+
   if (decodeUnit->fullLength > DECODER_BUFFER_SIZE) {
     fprintf(stderr, "Video decode buffer too small (%u > %u)\n",
             decodeUnit->fullLength, DECODER_BUFFER_SIZE);
@@ -169,14 +174,25 @@ static int wiiu_decoder_submit_decode_unit(PDECODE_UNIT decodeUnit) {
   }
 
   PLENTRY entry = decodeUnit->bufferList;
-  int length = 0;
+  size_t length = 0;
   while (entry != NULL) {
-    memcpy(decodebuffer+length, entry->data, entry->length);
+    if (entry->length < 0 || (size_t)entry->length > (DECODER_BUFFER_SIZE - length)) {
+      fprintf(stderr, "Decode unit segment exceeds buffer (%d bytes at %zu/%u)\n",
+              entry->length, length, DECODER_BUFFER_SIZE);
+      return DR_NEED_IDR;
+    }
+
+    memcpy(decodebuffer + length, entry->data, (size_t)entry->length);
     length += entry->length;
     entry = entry->next;
   }
 
-  int res = H264DECSetBitstream(decoder, decodebuffer, length, 0);
+  if (length > decodeUnit->fullLength) {
+    fprintf(stderr, "Decode unit length mismatch (%zu > %u)\n", length, decodeUnit->fullLength);
+    return DR_NEED_IDR;
+  }
+
+  int res = H264DECSetBitstream(decoder, decodebuffer, (int)length, 0);
   if (res != 0) {
     printf("h264_wiiu: Error setting bitstream 0x%07X\n", res);
     return DR_NEED_IDR;
