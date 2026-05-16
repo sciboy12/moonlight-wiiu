@@ -97,6 +97,15 @@ void wiiu_stream_init(uint32_t width, uint32_t height)
   GX2Invalidate(GX2_INVALIDATE_MODE_CPU_ATTRIBUTE_BUFFER, drcAttribs, ATTRIB_SIZE);
 }
 
+void wiiu_stream_reset(void)
+{
+  OSFastMutex_Lock(&queueMutex);
+  currentFrame = nextFrame = 0;
+  queueReadIndex = queueWriteIndex = 0;
+  droppedFrames = 0;
+  OSFastMutex_Unlock(&queueMutex);
+}
+
 int wiiu_stream_draw(void)
 {
   yuv_texture_t* tex = get_frame();

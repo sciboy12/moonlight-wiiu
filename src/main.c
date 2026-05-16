@@ -352,6 +352,8 @@ int main(int argc, char* argv[]) {
           // Wii U only supports H264
           config.stream.supportedVideoFormats = VIDEO_FORMAT_H264;
 
+          wiiu_stream_reset();
+
           if (stream(client, &server, &config) == 0) {
             wiiu_proc_set_home_enabled(0);
             start_input_thread();
@@ -377,6 +379,7 @@ int main(int argc, char* argv[]) {
       case STATE_STOP_STREAM: {
         stop_input_thread();
         LiStopConnection();
+        wiiu_stream_reset();
 
         if (config.quitappafter) {
           if (config.debug_level > 0)
