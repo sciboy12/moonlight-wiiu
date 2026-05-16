@@ -1,4 +1,5 @@
 #include "../config.h"
+#include "../connection.h"
 #include "wiiu.h"
 
 #include <malloc.h>
@@ -37,6 +38,8 @@ static OSAlarm inputAlarm;
 // ~60 Hz
 #define INPUT_UPDATE_RATE OSMillisecondsToTicks(16)
 #define INPUT_HEARTBEAT_MILLIS 500
+#define INPUT_HEARTBEAT_MILLIS_POOR 1500
+#define POINTER_EVENT_INTERVAL_MILLIS 33
 
 typedef struct controller_state_t {
   short buttonFlags;
@@ -51,6 +54,7 @@ typedef struct controller_state_t {
 static controller_state_t last_sent_state[4];
 static uint64_t last_sent_time[4];
 static bool input_state_initialized = false;
+static uint64_t lastPointerEventMillis = 0;
 
 static void reset_input_send_state(void)
 {
@@ -79,7 +83,8 @@ static void maybe_send_controller_state(short controllerNumber, short gamepad_ma
 
   bool changed = memcmp(&current, &last_sent_state[controllerNumber], sizeof(current)) != 0;
   uint64_t now = millis();
-  bool heartbeat_due = (now - last_sent_time[controllerNumber]) >= INPUT_HEARTBEAT_MILLIS;
+  uint64_t heartbeat_ms = connection_is_poor ? INPUT_HEARTBEAT_MILLIS_POOR : INPUT_HEARTBEAT_MILLIS;
+  bool heartbeat_due = (now - last_sent_time[controllerNumber]) >= heartbeat_ms;
   if (!changed && !heartbeat_due) {
     return;
   }
@@ -145,7 +150,11 @@ void handleTouch(VPADTouchData touch) {
       // Holding & dragging screen, not just tapping
       if (millis() - touchDownMillis > TAP_MILLIS || touchDownMillis == 0) {
         if (touch.x != last_x || touch.y != last_y) // Don't send extra data if we don't need to
-          LiSendMouseMoveEvent(touch.x - last_x, touch.y - last_y);
+          uint64_t now = millis();
+          if (now - lastPointerEventMillis >= POINTER_EVENT_INTERVAL_MILLIS) {
+            LiSendMouseMoveEvent(touch.x - last_x, touch.y - last_y);
+            lastPointerEventMillis = now;
+          }
         last_x = touch.x;
         last_y = touch.y;
       } else {

@@ -23,6 +23,7 @@
 #include <stdbool.h>
 
 extern CONNECTION_LISTENER_CALLBACKS connection_callbacks;
+extern volatile int connection_is_poor;
 extern ConnListenerRumble rumble_handler;
 extern ConnListenerRumbleTriggers rumble_triggers_handler;
 extern ConnListenerSetMotionEventState set_motion_event_state_handler;

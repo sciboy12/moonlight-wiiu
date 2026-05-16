@@ -35,6 +35,7 @@ ConnListenerRumble rumble_handler = NULL;
 ConnListenerRumbleTriggers rumble_triggers_handler = NULL;
 ConnListenerSetMotionEventState set_motion_event_state_handler = NULL;
 ConnListenerSetControllerLED set_controller_led_handler = NULL;
+volatile int connection_is_poor = 0;
 
 static void connection_terminated(int errorCode) {
   switch (errorCode) {
@@ -136,9 +137,11 @@ static void connection_status_update(int status) {
   switch (status) {
     case CONN_STATUS_OKAY:
       printf("Connection is okay\n");
+      connection_is_poor = 0;
       break;
     case CONN_STATUS_POOR:
       printf("Connection is poor\n");
+      connection_is_poor = 1;
       break;
   }
 }
