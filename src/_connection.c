@@ -119,11 +119,7 @@ static void connection_log_message(const char* format, ...) {
   static uint32_t idrWaitEvents = 0;
   static uint32_t idrRequests = 0;
   static uint64_t lastControlLogMs = 0;
-
-  va_list arglist;
-  va_start(arglist, format);
-  vprintf(format, arglist);
-  va_end(arglist);
+  bool noisyLine = false;
 
   uint64_t nowMs = OSTicksToMilliseconds(OSGetTime());
   if (lastControlLogMs != 0) {
@@ -136,14 +132,26 @@ static void connection_log_message(const char* format, ...) {
 
   if (strstr(format, "Network dropped ") != NULL && strstr(format, "frames") != NULL) {
     droppedFrameBursts++;
+    noisyLine = true;
   } else if (strstr(format, "Network dropped audio data") != NULL) {
     droppedAudioBursts++;
+    noisyLine = true;
   } else if (strstr(format, "Unrecoverable frame") != NULL) {
     unrecoverableFrames++;
+    noisyLine = true;
   } else if (strstr(format, "Waiting for IDR frame") != NULL) {
     idrWaitEvents++;
+    noisyLine = true;
   } else if (strstr(format, "IDR frame request sent") != NULL) {
     idrRequests++;
+    noisyLine = true;
+  }
+
+  if (!noisyLine) {
+    va_list arglist;
+    va_start(arglist, format);
+    vprintf(format, arglist);
+    va_end(arglist);
   }
 
   if (nowMs - lastNetDiagMs >= 1000) {

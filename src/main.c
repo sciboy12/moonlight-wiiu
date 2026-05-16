@@ -155,9 +155,10 @@ int main(int argc, char* argv[]) {
   if (config.filelog) {
     FILE* logf = freopen(MOONLIGHT_WIIU_LOG_PATH, "a", stdout);
     if (logf != NULL) {
-      setvbuf(stdout, NULL, _IOLBF, 0);
+      // Keep file logging fully buffered to minimize blocking on external storage.
+      setvbuf(stdout, NULL, _IOFBF, 64 * 1024);
       freopen(MOONLIGHT_WIIU_LOG_PATH, "a", stderr);
-      setvbuf(stderr, NULL, _IOLBF, 0);
+      setvbuf(stderr, NULL, _IOFBF, 64 * 1024);
       printf("File logging enabled: %s\n", MOONLIGHT_WIIU_LOG_PATH);
     }
   }
