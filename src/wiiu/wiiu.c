@@ -11,6 +11,7 @@
 #include <gx2/mem.h>
 #include <gx2/draw.h>
 #include <gx2/registers.h>
+#include <coreinit/time.h>
 
 #include "shaders/display.h"
 
@@ -34,6 +35,7 @@ static yuv_texture_t* queueMessages[MAX_QUEUEMESSAGES];
 static uint32_t queueWriteIndex;
 static uint32_t queueReadIndex;
 static uint32_t droppedFrames;
+static uint64_t lastQueueLogMs;
 
 void wiiu_stream_init(uint32_t width, uint32_t height)
 {
@@ -42,6 +44,7 @@ void wiiu_stream_init(uint32_t width, uint32_t height)
   OSFastMutex_Init(&queueMutex, "");
   queueReadIndex = queueWriteIndex = 0;
   droppedFrames = 0;
+  lastQueueLogMs = 0;
 
   if (!WHBGfxLoadGFDShaderGroup(&shaderGroup, 0, display_gsh)) {
     printf("Cannot load shader\n");
@@ -161,6 +164,13 @@ int wiiu_stream_draw(void)
     return 1;
   }
 
+  uint64_t nowMs = OSTicksToMilliseconds(OSGetTime());
+  if (nextFrame > currentFrame && nowMs - lastQueueLogMs > 1000) {
+    printf("Video render starvation: decoded=%u rendered=%u queueDepth=%u\n",
+           nextFrame, currentFrame, wiiu_stream_queue_depth());
+    lastQueueLogMs = nowMs;
+  }
+
   return 0;
 }
 
@@ -206,6 +216,14 @@ void add_frame(yuv_texture_t* msg)
   queueMessages[i] = msg;
 
   OSFastMutex_Unlock(&queueMutex);
+}
+
+uint32_t wiiu_stream_queue_depth(void)
+{
+  OSFastMutex_Lock(&queueMutex);
+  uint32_t depth = queueWriteIndex - queueReadIndex;
+  OSFastMutex_Unlock(&queueMutex);
+  return depth;
 }
 
 void wiiu_setup_renderstate(void)

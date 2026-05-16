@@ -12,6 +12,7 @@
 #include <malloc.h>
 #include <stdio.h>
 #include <string.h>
+#include <coreinit/time.h>
 
 // memory requirement for the maximum supported level (level 42)
 #define H264_MEM_REQUIREMENT (0x2200000 + 0x3ff + 0x480000)
@@ -162,6 +163,9 @@ static void wiiu_decoder_cleanup() {
 }
 
 static int wiiu_decoder_submit_decode_unit(PDECODE_UNIT decodeUnit) {
+  static uint64_t lastProgressLogMs = 0;
+  static uint32_t lastRenderedFrame = 0;
+
   if (decodeUnit == NULL || decodeUnit->bufferList == NULL) {
     fprintf(stderr, "Invalid decode unit\n");
     return DR_NEED_IDR;
@@ -209,6 +213,15 @@ static int wiiu_decoder_submit_decode_unit(PDECODE_UNIT decodeUnit) {
   nextFrame++;
 
   add_frame(tex);
+
+  uint64_t nowMs = OSTicksToMilliseconds(OSGetTime());
+  if (currentFrame != lastRenderedFrame) {
+    lastRenderedFrame = currentFrame;
+  } else if (nowMs - lastProgressLogMs > 1000) {
+    printf("Video decode progressing but render stalled: decoded=%u rendered=%u queueDepth=%u fullLength=%u\n",
+           nextFrame, currentFrame, wiiu_stream_queue_depth(), decodeUnit->fullLength);
+    lastProgressLogMs = nowMs;
+  }
 
   currentTexture++;
 
