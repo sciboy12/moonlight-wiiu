@@ -33,8 +33,8 @@ static int thread_running;
 static OSThread inputThread;
 static OSAlarm inputAlarm;
 
-// ~30 Hz to reduce CPU/network overhead from controller polling and event sends
-#define INPUT_UPDATE_RATE OSMillisecondsToTicks(33)
+// ~60 Hz
+#define INPUT_UPDATE_RATE OSMillisecondsToTicks(16)
 
 void handleTouch(VPADTouchData touch) {
   if (mouse_mode == MOUSE_MODE_ABSOLUTE) {
