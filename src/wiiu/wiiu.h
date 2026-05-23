@@ -47,6 +47,7 @@ typedef struct {
 void* get_frame(void);
 void add_frame(yuv_texture_t* msg);
 uint32_t wiiu_stream_queue_depth(void);
+uint32_t wiiu_stream_queue_highwater(void);
 
 extern uint32_t nextFrame;
 extern uint32_t currentFrame;
