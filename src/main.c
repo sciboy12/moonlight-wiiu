@@ -33,6 +33,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
+#include <malloc.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -150,26 +151,26 @@ static void worker_deallocator(OSThread* thread, void* stack) { free(stack); }
 
 static int network_worker_proc(int argc, const char** argv) {
   workers.networkRunning = 1;
+  workers.networkConnected = 1;
   workers.networkTick = now_ms();
-  while (!workers.stopRequested && LiGetConnectionState() != LI_STATE_TERMINATED) {
-    int state = LiGetConnectionState();
-    workers.networkConnected = (state == LI_STATE_CONNECTED);
-    if (state == LI_STATE_CONNECTED) {
-      LiPollConnection(0);
-      workers.networkTick = now_ms();
-    } else {
-      OSSleepTicks(OSMillisecondsToTicks(1));
-    }
+  while (!workers.stopRequested) {
+    // Limelight handles control/network internally after LiStartConnection().
+    // We keep this worker as lifecycle owner and watchdog heartbeat source.
+    workers.networkTick = now_ms();
+    OSSleepTicks(OSMillisecondsToTicks(1));
   }
+  workers.networkConnected = 0;
   workers.networkRunning = 0;
   return 0;
 }
 
 static int decode_worker_proc(int argc, const char** argv) {
+  uint32_t lastNextFrame = nextFrame;
   workers.decodeRunning = 1;
   workers.decodeTick = now_ms();
   while (!workers.stopRequested) {
-    if (nextFrame != currentFrame) {
+    if (nextFrame != lastNextFrame) {
+      lastNextFrame = nextFrame;
       workers.decodeTick = now_ms();
     }
     OSSleepTicks(OSMillisecondsToTicks(1));
