@@ -131,14 +131,11 @@ typedef struct {
   volatile int stopRequested;
   volatile int networkRunning;
   volatile int decodeRunning;
-  volatile int renderRunning;
   volatile int networkConnected;
   uint64_t networkTick;
   uint64_t decodeTick;
-  uint64_t renderTick;
   OSThread networkThread;
   OSThread decodeThread;
-  OSThread renderThread;
 } STREAM_WORKERS;
 
 static STREAM_WORKERS workers;
@@ -179,19 +176,6 @@ static int decode_worker_proc(int argc, const char** argv) {
   return 0;
 }
 
-static int render_worker_proc(int argc, const char** argv) {
-  workers.renderRunning = 1;
-  workers.renderTick = now_ms();
-  while (!workers.stopRequested) {
-    if (wiiu_stream_draw()) {
-      workers.renderTick = now_ms();
-    } else {
-      OSSleepTicks(OSMillisecondsToTicks(1));
-    }
-  }
-  workers.renderRunning = 0;
-  return 0;
-}
 
 static int start_worker(OSThread* thread, const char* name, int (*entry)(int, const char**), int priority) {
   const int stack_size = 2 * 1024 * 1024;
@@ -212,13 +196,11 @@ static int start_stream_workers(void) {
   workers.active = 1;
   if (start_worker(&workers.networkThread, "StreamNetwork", network_worker_proc, 0x12) != 0) return -1;
   if (start_worker(&workers.decodeThread, "StreamDecode", decode_worker_proc, 0x11) != 0) return -1;
-  if (start_worker(&workers.renderThread, "StreamRender", render_worker_proc, 0x10) != 0) return -1;
   return 0;
 }
 
 static void stop_stream_workers(void) {
   workers.stopRequested = 1;
-  if (workers.renderRunning) OSJoinThread(&workers.renderThread, NULL);
   if (workers.decodeRunning) OSJoinThread(&workers.decodeThread, NULL);
   if (workers.networkRunning) OSJoinThread(&workers.networkThread, NULL);
   workers.active = 0;
@@ -459,9 +441,10 @@ int main(int argc, char* argv[]) {
             wiiu_proc_set_home_enabled(0);
             start_input_thread();
             if (start_stream_workers() != 0) {
+              stop_stream_workers();
               stop_input_thread();
               LiStopConnection();
-              state = STATE_STOP_STREAM;
+              state = STATE_CONNECTED;
               break;
             }
             state = STATE_STREAMING;
@@ -488,7 +471,10 @@ int main(int argc, char* argv[]) {
           if (netDelta > 50 && workers.networkConnected) {
             printf("Health warn: network/control worker stalled for %llu ms\n", netDelta);
           }
-          printf("Health: q=%u q_hi=%u net=%llums dec=%llums ren=%llums\n", depth, highwater, now - workers.networkTick, now - workers.decodeTick, now - workers.renderTick);
+          printf("Health: q=%u q_hi=%u net=%llums dec=%llums\n", depth, highwater, now - workers.networkTick, now - workers.decodeTick);
+        }
+        if (!wiiu_stream_draw()) {
+          OSSleepTicks(OSMillisecondsToTicks(1));
         }
         break;
       }
