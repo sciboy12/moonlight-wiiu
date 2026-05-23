@@ -1,7 +1,9 @@
 #include "../config.h"
+#include "../connection.h"
 #include "wiiu.h"
 
 #include <malloc.h>
+#include <string.h>
 
 #include <vpad/input.h>
 #include <padscore/kpad.h>
@@ -35,6 +37,65 @@ static OSAlarm inputAlarm;
 
 // ~60 Hz
 #define INPUT_UPDATE_RATE OSMillisecondsToTicks(16)
+#define INPUT_HEARTBEAT_MILLIS 500
+#define INPUT_HEARTBEAT_MILLIS_POOR 1500
+#define POINTER_EVENT_INTERVAL_MILLIS 33
+
+typedef struct controller_state_t {
+  short buttonFlags;
+  unsigned char leftTrigger;
+  unsigned char rightTrigger;
+  short leftStickX;
+  short leftStickY;
+  short rightStickX;
+  short rightStickY;
+} controller_state_t;
+
+static controller_state_t last_sent_state[4];
+static uint64_t last_sent_time[4];
+static bool input_state_initialized = false;
+static uint64_t lastPointerEventMillis = 0;
+
+static void reset_input_send_state(void)
+{
+  memset(last_sent_state, 0, sizeof(last_sent_state));
+  memset(last_sent_time, 0, sizeof(last_sent_time));
+  input_state_initialized = true;
+}
+
+static void maybe_send_controller_state(short controllerNumber, short gamepad_mask, short buttonFlags,
+                                        unsigned char leftTrigger, unsigned char rightTrigger,
+                                        short leftStickX, short leftStickY, short rightStickX, short rightStickY)
+{
+  if (!input_state_initialized) {
+    reset_input_send_state();
+  }
+
+  controller_state_t current = {
+    .buttonFlags = buttonFlags,
+    .leftTrigger = leftTrigger,
+    .rightTrigger = rightTrigger,
+    .leftStickX = leftStickX,
+    .leftStickY = leftStickY,
+    .rightStickX = rightStickX,
+    .rightStickY = rightStickY,
+  };
+
+  bool changed = memcmp(&current, &last_sent_state[controllerNumber], sizeof(current)) != 0;
+  uint64_t now = millis();
+  uint64_t heartbeat_ms = connection_is_poor ? INPUT_HEARTBEAT_MILLIS_POOR : INPUT_HEARTBEAT_MILLIS;
+  bool heartbeat_due = (now - last_sent_time[controllerNumber]) >= heartbeat_ms;
+  if (!changed && !heartbeat_due) {
+    return;
+  }
+
+  LiSendMultiControllerEvent(controllerNumber, gamepad_mask, buttonFlags,
+    leftTrigger, rightTrigger,
+    leftStickX, leftStickY, rightStickX, rightStickY);
+
+  last_sent_state[controllerNumber] = current;
+  last_sent_time[controllerNumber] = now;
+}
 
 void handleTouch(VPADTouchData touch) {
   if (mouse_mode == MOUSE_MODE_ABSOLUTE) {
@@ -88,8 +149,13 @@ void handleTouch(VPADTouchData touch) {
     if (touch.touched) {
       // Holding & dragging screen, not just tapping
       if (millis() - touchDownMillis > TAP_MILLIS || touchDownMillis == 0) {
-        if (touch.x != last_x || touch.y != last_y) // Don't send extra data if we don't need to
-          LiSendMouseMoveEvent(touch.x - last_x, touch.y - last_y);
+        if (touch.x != last_x || touch.y != last_y) { // Don't send extra data if we don't need to
+          uint64_t now = millis();
+          if (now - lastPointerEventMillis >= POINTER_EVENT_INTERVAL_MILLIS) {
+            LiSendMouseMoveEvent(touch.x - last_x, touch.y - last_y);
+            lastPointerEventMillis = now;
+          }
+        }
         last_x = touch.x;
         last_y = touch.y;
       } else {
@@ -111,6 +177,7 @@ void wiiu_input_init(void)
 {
 	KPADInit();
 	WPADEnableURCC(1);
+  reset_input_send_state();
 }
 
 void wiiu_input_update(void) {
@@ -162,7 +229,7 @@ void wiiu_input_update(void) {
       return;
     }
 
-    LiSendMultiControllerEvent(controllerNumber++, gamepad_mask, buttonFlags,
+    maybe_send_controller_state(controllerNumber++, gamepad_mask, buttonFlags,
       (vpad.hold & VPAD_BUTTON_ZL) ? 0xFF : 0,
       (vpad.hold & VPAD_BUTTON_ZR) ? 0xFF : 0,
       vpad.leftStick.x * INT16_MAX, vpad.leftStick.y * INT16_MAX,
@@ -216,7 +283,7 @@ void wiiu_input_update(void) {
           return;
         }
 
-        LiSendMultiControllerEvent(controllerNumber++, gamepad_mask, buttonFlags,
+        maybe_send_controller_state(controllerNumber++, gamepad_mask, buttonFlags,
           (kpad_data.pro.hold & WPAD_PRO_TRIGGER_ZL) ? 0xFF : 0,
           (kpad_data.pro.hold & WPAD_PRO_TRIGGER_ZR) ? 0xFF : 0,
           kpad_data.pro.leftStick.x * INT16_MAX, kpad_data.pro.leftStick.y * INT16_MAX,
@@ -261,7 +328,7 @@ void wiiu_input_update(void) {
           return;
         }
 
-        LiSendMultiControllerEvent(controllerNumber++, gamepad_mask, buttonFlags,
+        maybe_send_controller_state(controllerNumber++, gamepad_mask, buttonFlags,
           (kpad_data.classic.hold & WPAD_CLASSIC_BUTTON_ZL) ? 0xFF : 0x00,
           (kpad_data.classic.hold & WPAD_CLASSIC_BUTTON_ZR) ? 0xFF : 0x00,
           kpad_data.classic.leftStick.x * INT16_MAX, kpad_data.classic.leftStick.y * INT16_MAX,
@@ -358,7 +425,8 @@ uint32_t wiiu_input_buttons_triggered(void)
 
 static void alarm_callback(OSAlarm* alarm, OSContext* ctx)
 {
-  wiiu_input_update();
+  (void)alarm;
+  (void)ctx;
 }
 
 static int input_thread_proc(int argc, const char **argv)
@@ -368,7 +436,12 @@ static int input_thread_proc(int argc, const char **argv)
 
   while (thread_running) {
     OSWaitAlarm(&inputAlarm);
+    if (thread_running) {
+      wiiu_input_update();
+    }
   }
+
+  return 0;
 }
 
 static void thread_deallocator(OSThread *thread, void *stack)

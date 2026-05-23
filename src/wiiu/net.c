@@ -10,14 +10,28 @@
 #define NET_MEMORY_SIZE 0x300000
 
 static OSThread memoryThread;
+static void* netMemory = NULL;
+static bool netMemoryInitialized = false;
 
 static int wiiu_net_memory_thread(int argc, const char **argv)
 {
   // This provides a bunch of memory to the net stack,
   // which we can use for buffering the videostream socket
-  void* mem = memalign(0x40, NET_MEMORY_SIZE);
-  int rc = somemopt(SOMEMOPT_REQUEST_INIT, mem, NET_MEMORY_SIZE, SOMEMOPT_FLAGS_NONE);
+  netMemory = memalign(0x40, NET_MEMORY_SIZE);
+  if (netMemory == NULL) {
+    printf("Failed to allocate SOMEMOPT buffer.\n");
+    return -1;
+  }
+
+  int rc = somemopt(SOMEMOPT_REQUEST_INIT, netMemory, NET_MEMORY_SIZE, SOMEMOPT_FLAGS_NONE);
   printf("SOMEMOPT_REQUEST_INIT: %d\n", rc);
+  if (rc < 0) {
+    free(netMemory);
+    netMemory = NULL;
+    return rc;
+  }
+
+  netMemoryInitialized = true;
 
   return 0;
 }
@@ -53,9 +67,25 @@ void wiiu_net_init(void)
   // wait for somemopt to be initialized
   int rc = somemopt(SOMEMOPT_REQUEST_WAIT_FOR_INIT, NULL, 0, SOMEMOPT_FLAGS_NONE);
   printf("SOMEMOPT_REQUEST_WAIT_FOR_INIT: %d\n", rc);
+  if (rc < 0 || !netMemoryInitialized) {
+    printf("Warning: SOMEMOPT initialization failed; stream sockets may stall under packet bursts.\n");
+  }
 }
 
 void wiiu_net_shutdown(void)
 {
-  // nothing here yet
+#ifdef SOMEMOPT_REQUEST_FINI
+  if (netMemoryInitialized) {
+    int rc = somemopt(SOMEMOPT_REQUEST_FINI, NULL, 0, SOMEMOPT_FLAGS_NONE);
+    printf("SOMEMOPT_REQUEST_FINI: %d\n", rc);
+    netMemoryInitialized = false;
+  }
+#else
+  netMemoryInitialized = false;
+#endif
+
+  if (netMemory != NULL) {
+    free(netMemory);
+    netMemory = NULL;
+  }
 }

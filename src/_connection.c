@@ -22,6 +22,10 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <signal.h>
+#include <string.h>
+#ifdef __WIIU__
+#include <coreinit/time.h>
+#endif
 
 #ifdef __WIIU__
 #include "wiiu/wiiu.h"
@@ -35,6 +39,7 @@ ConnListenerRumble rumble_handler = NULL;
 ConnListenerRumbleTriggers rumble_triggers_handler = NULL;
 ConnListenerSetMotionEventState set_motion_event_state_handler = NULL;
 ConnListenerSetControllerLED set_controller_led_handler = NULL;
+volatile int connection_is_poor = 0;
 
 static void connection_terminated(int errorCode) {
   switch (errorCode) {
@@ -93,11 +98,72 @@ static void connection_terminated(int errorCode) {
 #endif
 }
 
+static void connection_stage_starting(int stage) {
+  printf("Connection stage starting: %d\n", stage);
+}
+
+static void connection_stage_complete(int stage) {
+  printf("Connection stage complete: %d\n", stage);
+}
+
+static void connection_stage_failed(int stage, int errorCode) {
+  printf("Connection stage failed: stage=%d error=%d\n", stage, errorCode);
+}
+
 static void connection_log_message(const char* format, ...) {
+#ifdef __WIIU__
+  static uint64_t lastNetDiagMs = 0;
+  static uint32_t droppedFrameBursts = 0;
+  static uint32_t droppedAudioBursts = 0;
+  static uint32_t unrecoverableFrames = 0;
+  static uint32_t idrWaitEvents = 0;
+  static uint32_t idrRequests = 0;
+  bool noisyLine = false;
+
+  uint64_t nowMs = OSTicksToMilliseconds(OSGetTime());
+
+  if (strstr(format, "Network dropped ") != NULL && strstr(format, "frames") != NULL) {
+    droppedFrameBursts++;
+    noisyLine = true;
+  } else if (strstr(format, "Network dropped audio data") != NULL) {
+    droppedAudioBursts++;
+    noisyLine = true;
+  } else if (strstr(format, "Unrecoverable frame") != NULL) {
+    unrecoverableFrames++;
+    noisyLine = true;
+  } else if (strstr(format, "Waiting for IDR frame") != NULL) {
+    idrWaitEvents++;
+    noisyLine = true;
+  } else if (strstr(format, "IDR frame request sent") != NULL) {
+    idrRequests++;
+    noisyLine = true;
+  }
+
+  if (!noisyLine) {
+    va_list arglist;
+    va_start(arglist, format);
+    vprintf(format, arglist);
+    va_end(arglist);
+  }
+
+  if (nowMs - lastNetDiagMs >= 1000) {
+    if (droppedFrameBursts || droppedAudioBursts || unrecoverableFrames || idrWaitEvents || idrRequests) {
+      printf("Net diag/s: dropBursts(video=%u audio=%u) unrecoverable=%u idr(wait=%u req=%u)\n",
+             droppedFrameBursts, droppedAudioBursts, unrecoverableFrames, idrWaitEvents, idrRequests);
+      droppedFrameBursts = 0;
+      droppedAudioBursts = 0;
+      unrecoverableFrames = 0;
+      idrWaitEvents = 0;
+      idrRequests = 0;
+    }
+    lastNetDiagMs = nowMs;
+  }
+#else
   va_list arglist;
   va_start(arglist, format);
   vprintf(format, arglist);
   va_end(arglist);
+#endif
 }
 
 static void rumble(unsigned short controllerNumber, unsigned short lowFreqMotor, unsigned short highFreqMotor) {
@@ -124,17 +190,19 @@ static void connection_status_update(int status) {
   switch (status) {
     case CONN_STATUS_OKAY:
       printf("Connection is okay\n");
+      connection_is_poor = 0;
       break;
     case CONN_STATUS_POOR:
       printf("Connection is poor\n");
+      connection_is_poor = 1;
       break;
   }
 }
 
 CONNECTION_LISTENER_CALLBACKS connection_callbacks = {
-  .stageStarting = NULL,
-  .stageComplete = NULL,
-  .stageFailed = NULL,
+  .stageStarting = connection_stage_starting,
+  .stageComplete = connection_stage_complete,
+  .stageFailed = connection_stage_failed,
   .connectionStarted = NULL,
   .connectionTerminated = connection_terminated,
   .logMessage = connection_log_message,

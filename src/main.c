@@ -45,6 +45,9 @@
 #include <coreinit/thread.h>
 #include <coreinit/time.h>
 
+#define MOONLIGHT_WIIU_LOG_PATH "/vol/external01/wiiu/apps/moonlight/moonlight.log"
+#define DISABLE_FILE_LOGGING 1
+
 #ifdef DEBUG
 void Debug_Init();
 #endif
@@ -149,6 +152,21 @@ int main(int argc, char* argv[]) {
 
   CONFIGURATION config;
   config_parse(argc, argv, &config);
+
+  if (config.filelog) {
+#if DISABLE_FILE_LOGGING
+    printf("File logging requested but disabled at build time (DISABLE_FILE_LOGGING=1).\n");
+#else
+    FILE* logf = freopen(MOONLIGHT_WIIU_LOG_PATH, "a", stdout);
+    if (logf != NULL) {
+      // Keep file logging fully buffered to minimize blocking on external storage.
+      setvbuf(stdout, NULL, _IOFBF, 64 * 1024);
+      freopen(MOONLIGHT_WIIU_LOG_PATH, "a", stderr);
+      setvbuf(stderr, NULL, _IOFBF, 64 * 1024);
+      printf("File logging enabled: %s\n", MOONLIGHT_WIIU_LOG_PATH);
+    }
+#endif
+  }
 
   // TODO
   config.unsupported = true;

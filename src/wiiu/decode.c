@@ -12,6 +12,7 @@
 #include <malloc.h>
 #include <stdio.h>
 #include <string.h>
+#include <coreinit/time.h>
 
 // memory requirement for the maximum supported level (level 42)
 #define H264_MEM_REQUIREMENT (0x2200000 + 0x3ff + 0x480000)
@@ -162,6 +163,18 @@ static void wiiu_decoder_cleanup() {
 }
 
 static int wiiu_decoder_submit_decode_unit(PDECODE_UNIT decodeUnit) {
+  static uint64_t lastProgressLogMs = 0;
+  static uint64_t lastPerfLogMs = 0;
+  static uint32_t lastRenderedFrame = 0;
+  static uint32_t decodeExecOver10ms = 0;
+  static uint32_t decodeExecOver16ms = 0;
+  static uint64_t decodeExecMaxMs = 0;
+
+  if (decodeUnit == NULL || decodeUnit->bufferList == NULL) {
+    fprintf(stderr, "Invalid decode unit\n");
+    return DR_NEED_IDR;
+  }
+
   if (decodeUnit->fullLength > DECODER_BUFFER_SIZE) {
     fprintf(stderr, "Video decode buffer too small (%u > %u)\n",
             decodeUnit->fullLength, DECODER_BUFFER_SIZE);
@@ -169,14 +182,25 @@ static int wiiu_decoder_submit_decode_unit(PDECODE_UNIT decodeUnit) {
   }
 
   PLENTRY entry = decodeUnit->bufferList;
-  int length = 0;
+  size_t length = 0;
   while (entry != NULL) {
-    memcpy(decodebuffer+length, entry->data, entry->length);
+    if (entry->length < 0 || (size_t)entry->length > (DECODER_BUFFER_SIZE - length)) {
+      fprintf(stderr, "Decode unit segment exceeds buffer (%d bytes at %zu/%u)\n",
+              entry->length, length, DECODER_BUFFER_SIZE);
+      return DR_NEED_IDR;
+    }
+
+    memcpy(decodebuffer + length, entry->data, (size_t)entry->length);
     length += entry->length;
     entry = entry->next;
   }
 
-  int res = H264DECSetBitstream(decoder, decodebuffer, length, 0);
+  if (length != decodeUnit->fullLength) {
+    fprintf(stderr, "Decode unit length mismatch (%zu != %u)\n", length, decodeUnit->fullLength);
+    return DR_NEED_IDR;
+  }
+
+  int res = H264DECSetBitstream(decoder, decodebuffer, (int)length, 0);
   if (res != 0) {
     printf("h264_wiiu: Error setting bitstream 0x%07X\n", res);
     return DR_NEED_IDR;
@@ -184,7 +208,18 @@ static int wiiu_decoder_submit_decode_unit(PDECODE_UNIT decodeUnit) {
 
   yuv_texture_t* tex = &textures[currentTexture];
 
+  uint64_t decodeStartMs = OSTicksToMilliseconds(OSGetTime());
   res = H264DECExecute(decoder, tex->yTex.surface.image);
+  uint64_t decodeExecMs = OSTicksToMilliseconds(OSGetTime()) - decodeStartMs;
+  if (decodeExecMs > decodeExecMaxMs) {
+    decodeExecMaxMs = decodeExecMs;
+  }
+  if (decodeExecMs > 10) {
+    decodeExecOver10ms++;
+  }
+  if (decodeExecMs > 16) {
+    decodeExecOver16ms++;
+  }
   if ((res & ~0xff) != 0) {
     printf("h264_wiiu: Error decoding frame 0x%07X\n", res);
     return DR_NEED_IDR;
@@ -193,6 +228,32 @@ static int wiiu_decoder_submit_decode_unit(PDECODE_UNIT decodeUnit) {
   nextFrame++;
 
   add_frame(tex);
+
+  uint64_t nowMs = OSTicksToMilliseconds(OSGetTime());
+  if (currentFrame != lastRenderedFrame) {
+    lastRenderedFrame = currentFrame;
+  } else if (nowMs - lastProgressLogMs > 10000) {
+    uint32_t queueDepth = wiiu_stream_queue_depth();
+    uint32_t renderLag = nextFrame - currentFrame;
+    if (queueDepth >= 6 || renderLag >= 8) {
+      printf("Video decode/render lag: decoded=%u rendered=%u lag=%u queueDepth=%u fullLength=%u\n",
+             nextFrame, currentFrame, renderLag, queueDepth, decodeUnit->fullLength);
+    }
+    lastProgressLogMs = nowMs;
+  }
+
+  if (nowMs - lastPerfLogMs > 5000) {
+    uint32_t queueDepth = wiiu_stream_queue_depth();
+    uint32_t queueHighwater = wiiu_stream_queue_highwater();
+    if (decodeExecOver10ms || decodeExecOver16ms || queueDepth >= 6) {
+      printf("Decode perf/5s: >10ms=%u >16ms=%u max=%llums queue=%u highwater=%u\n",
+             decodeExecOver10ms, decodeExecOver16ms, decodeExecMaxMs, queueDepth, queueHighwater);
+    }
+    decodeExecOver10ms = 0;
+    decodeExecOver16ms = 0;
+    decodeExecMaxMs = 0;
+    lastPerfLogMs = nowMs;
+  }
 
   currentTexture++;
 
