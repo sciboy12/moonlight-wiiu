@@ -33,7 +33,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
-#include <malloc.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -126,84 +125,8 @@ static int stream(GS_CLIENT client, PSERVER_DATA server, PCONFIGURATION config) 
 
 
 
-typedef struct {
-  volatile int active;
-  volatile int stopRequested;
-  volatile int networkRunning;
-  volatile int decodeRunning;
-  volatile int networkConnected;
-  uint64_t networkTick;
-  uint64_t decodeTick;
-  OSThread networkThread;
-  OSThread decodeThread;
-} STREAM_WORKERS;
-
-static STREAM_WORKERS workers;
-
 static uint64_t now_ms(void) {
   return OSTicksToMilliseconds(OSGetTime());
-}
-
-static void worker_deallocator(OSThread* thread, void* stack) { free(stack); }
-
-static int network_worker_proc(int argc, const char** argv) {
-  workers.networkRunning = 1;
-  workers.networkConnected = 1;
-  workers.networkTick = now_ms();
-  while (!workers.stopRequested) {
-    // Limelight handles control/network internally after LiStartConnection().
-    // We keep this worker as lifecycle owner and watchdog heartbeat source.
-    workers.networkTick = now_ms();
-    OSSleepTicks(OSMillisecondsToTicks(1));
-  }
-  workers.networkConnected = 0;
-  workers.networkRunning = 0;
-  return 0;
-}
-
-static int decode_worker_proc(int argc, const char** argv) {
-  uint32_t lastNextFrame = nextFrame;
-  workers.decodeRunning = 1;
-  workers.decodeTick = now_ms();
-  while (!workers.stopRequested) {
-    if (nextFrame != lastNextFrame) {
-      lastNextFrame = nextFrame;
-      workers.decodeTick = now_ms();
-    }
-    OSSleepTicks(OSMillisecondsToTicks(1));
-  }
-  workers.decodeRunning = 0;
-  return 0;
-}
-
-
-static int start_worker(OSThread* thread, const char* name, int (*entry)(int, const char**), int priority) {
-  const int stack_size = 2 * 1024 * 1024;
-  uint8_t* stack = (uint8_t*)memalign(16, stack_size);
-  if (!stack) return -1;
-  if (!OSCreateThread(thread, entry, 0, NULL, stack + stack_size, stack_size, priority, OS_THREAD_ATTRIB_AFFINITY_ANY)) {
-    free(stack);
-    return -1;
-  }
-  OSSetThreadName(thread, name);
-  OSSetThreadDeallocator(thread, worker_deallocator);
-  OSResumeThread(thread);
-  return 0;
-}
-
-static int start_stream_workers(void) {
-  memset(&workers, 0, sizeof(workers));
-  workers.active = 1;
-  if (start_worker(&workers.networkThread, "StreamNetwork", network_worker_proc, 0x12) != 0) return -1;
-  if (start_worker(&workers.decodeThread, "StreamDecode", decode_worker_proc, 0x11) != 0) return -1;
-  return 0;
-}
-
-static void stop_stream_workers(void) {
-  workers.stopRequested = 1;
-  if (workers.decodeRunning) OSJoinThread(&workers.decodeThread, NULL);
-  if (workers.networkRunning) OSJoinThread(&workers.networkThread, NULL);
-  workers.active = 0;
 }
 
 int main(int argc, char* argv[]) {
@@ -440,13 +363,6 @@ int main(int argc, char* argv[]) {
           if (stream(client, &server, &config) == 0) {
             wiiu_proc_set_home_enabled(0);
             start_input_thread();
-            if (start_stream_workers() != 0) {
-              stop_stream_workers();
-              stop_input_thread();
-              LiStopConnection();
-              state = STATE_CONNECTED;
-              break;
-            }
             state = STATE_STREAMING;
             break;
           }
@@ -467,20 +383,15 @@ int main(int argc, char* argv[]) {
           lastHealthMs = now;
           uint32_t depth = wiiu_stream_queue_depth();
           uint32_t highwater = wiiu_stream_queue_highwater();
-          uint64_t netDelta = now - workers.networkTick;
-          if (netDelta > 50 && workers.networkConnected) {
-            printf("Health warn: network/control worker stalled for %llu ms\n", netDelta);
-          }
-          printf("Health: q=%u q_hi=%u net=%llums dec=%llums\n", depth, highwater, now - workers.networkTick, now - workers.decodeTick);
+          printf("Health: q=%u q_hi=%u\n", depth, highwater);
         }
         if (!wiiu_stream_draw()) {
-          OSSleepTicks(OSMillisecondsToTicks(1));
+          OSSleepTicks(OSMillisecondsToTicks(8));
         }
         break;
       }
       case STATE_STOP_STREAM: {
         stop_input_thread();
-        stop_stream_workers();
         LiStopConnection();
         wiiu_stream_reset();
 
