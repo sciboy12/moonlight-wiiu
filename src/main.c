@@ -123,6 +123,12 @@ static int stream(GS_CLIENT client, PSERVER_DATA server, PCONFIGURATION config) 
   return 0;
 }
 
+
+
+static uint64_t now_ms(void) {
+  return OSTicksToMilliseconds(OSGetTime());
+}
+
 int main(int argc, char* argv[]) {
   wiiu_proc_init();
 
@@ -371,8 +377,16 @@ int main(int argc, char* argv[]) {
         break;
       }
       case STATE_STREAMING: {
+        static uint64_t lastHealthMs = 0;
+        uint64_t now = now_ms();
+        if (lastHealthMs == 0 || now - lastHealthMs >= 5000) {
+          lastHealthMs = now;
+          uint32_t depth = wiiu_stream_queue_depth();
+          uint32_t highwater = wiiu_stream_queue_highwater();
+          printf("Health: q=%u q_hi=%u\n", depth, highwater);
+        }
         if (!wiiu_stream_draw()) {
-          OSSleepTicks(OSMillisecondsToTicks(1));
+          OSSleepTicks(OSMillisecondsToTicks(8));
         }
         break;
       }

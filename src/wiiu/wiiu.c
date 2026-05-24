@@ -34,6 +34,7 @@ static yuv_texture_t* queueMessages[MAX_QUEUEMESSAGES];
 static uint32_t queueWriteIndex;
 static uint32_t queueReadIndex;
 static uint32_t droppedFrames;
+static uint32_t queueHighWater;
 
 void wiiu_stream_init(uint32_t width, uint32_t height)
 {
@@ -42,6 +43,7 @@ void wiiu_stream_init(uint32_t width, uint32_t height)
   OSFastMutex_Init(&queueMutex, "");
   queueReadIndex = queueWriteIndex = 0;
   droppedFrames = 0;
+  queueHighWater = 0;
 
   if (!WHBGfxLoadGFDShaderGroup(&shaderGroup, 0, display_gsh)) {
     printf("Cannot load shader\n");
@@ -177,9 +179,9 @@ void* get_frame(void)
   OSFastMutex_Lock(&queueMutex);
 
   uint32_t elements_in = queueWriteIndex - queueReadIndex;
-  if(elements_in == 0) {
+  if (elements_in == 0) {
     OSFastMutex_Unlock(&queueMutex);
-    return NULL; // framequeue is empty
+    return NULL;
   }
 
   uint32_t i = (queueReadIndex)++ & (MAX_QUEUEMESSAGES - 1);
@@ -191,21 +193,45 @@ void* get_frame(void)
 
 void add_frame(yuv_texture_t* msg)
 {
+  uint32_t localDrops = 0;
+
   OSFastMutex_Lock(&queueMutex);
 
   uint32_t elements_in = queueWriteIndex - queueReadIndex;
   if (elements_in == MAX_QUEUEMESSAGES) {
-    // Queue is full, drop the oldest frame so we can keep the latest decode output.
     queueReadIndex++;
-    if ((++droppedFrames % 120) == 0) {
-      printf("Video frame queue overflow (%u drops). Dropping old frames to keep stream responsive.\n", droppedFrames);
-    }
+    localDrops = ++droppedFrames;
   }
 
   uint32_t i = (queueWriteIndex)++ & (MAX_QUEUEMESSAGES - 1);
   queueMessages[i] = msg;
 
+  uint32_t depth = queueWriteIndex - queueReadIndex;
+  if (depth > queueHighWater) {
+    queueHighWater = depth;
+  }
+
   OSFastMutex_Unlock(&queueMutex);
+
+  if (localDrops != 0 && (localDrops % 120) == 0) {
+    printf("Video frame queue overflow (%u drops). Dropping old frames to keep stream responsive.\n", localDrops);
+  }
+}
+
+uint32_t wiiu_stream_queue_depth(void)
+{
+  OSFastMutex_Lock(&queueMutex);
+  uint32_t depth = queueWriteIndex - queueReadIndex;
+  OSFastMutex_Unlock(&queueMutex);
+  return depth;
+}
+
+uint32_t wiiu_stream_queue_highwater(void)
+{
+  OSFastMutex_Lock(&queueMutex);
+  uint32_t highWater = queueHighWater;
+  OSFastMutex_Unlock(&queueMutex);
+  return highWater;
 }
 
 void wiiu_setup_renderstate(void)
