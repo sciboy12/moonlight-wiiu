@@ -63,7 +63,8 @@ CFLAGS	+=	$(INCLUDE) -D__WIIU__ -D__WUT__ -DBIGENDIAN -DUSE_MBEDTLS
 CXXFLAGS	:= $(CFLAGS)
 
 ASFLAGS	:=	$(ARCH)
-LDFLAGS	=	$(ARCH) $(RPXSPECS) -Wl,-Map,$(notdir $*.map)
+LDFLAGS	=	$(ARCH) $(RPXSPECS) -Wl,-Map,$(notdir $*.map) \
+			-Wl,--wrap=enet_socket_send -Wl,--wrap=enet_socket_receive -Wl,--wrap=enet_peer_send
 
 LIBS	:= -lfreetype -lpng -lbz2 -lcurl -lbrotlidec -lbrotlicommon -lmbedtls -lmbedx509 -lmbedcrypto -lSDL2 -lopus -lexpat -lz -lwut -lm
 

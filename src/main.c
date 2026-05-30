@@ -40,6 +40,7 @@
 #include <arpa/inet.h>
 
 #include "wiiu/wiiu.h"
+#include "wiiu/stream_diag.h"
 #include <whb/gfx.h>
 #include <vpad/input.h>
 #include <coreinit/thread.h>
@@ -353,6 +354,7 @@ int main(int argc, char* argv[]) {
           config.stream.supportedVideoFormats = VIDEO_FORMAT_H264;
 
           wiiu_stream_reset();
+          wiiu_stream_diag_reset();
 
           if (stream(client, &server, &config) == 0) {
             wiiu_proc_set_home_enabled(0);
@@ -374,11 +376,13 @@ int main(int argc, char* argv[]) {
         if (!wiiu_stream_draw()) {
           OSSleepTicks(OSMillisecondsToTicks(1));
         }
+        wiiu_stream_diag_periodic("streaming");
         break;
       }
       case STATE_STOP_STREAM: {
         stop_input_thread();
         LiStopConnection();
+        wiiu_stream_diag_dump("stop stream");
         wiiu_stream_reset();
 
         if (config.quitappafter) {

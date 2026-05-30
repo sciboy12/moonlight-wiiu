@@ -25,6 +25,7 @@
 
 #ifdef __WIIU__
 #include "wiiu/wiiu.h"
+#include "wiiu/stream_diag.h"
 #endif
 
 #ifdef HAVE_SDL
@@ -37,6 +38,9 @@ ConnListenerSetMotionEventState set_motion_event_state_handler = NULL;
 ConnListenerSetControllerLED set_controller_led_handler = NULL;
 
 static void connection_terminated(int errorCode) {
+#ifdef __WIIU__
+  wiiu_stream_diag_dump("connection terminated");
+#endif
   switch (errorCode) {
   case ML_ERROR_GRACEFUL_TERMINATION:
     printf("Connection has been terminated gracefully.\n");

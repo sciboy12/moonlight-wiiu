@@ -1,4 +1,5 @@
 #include "wiiu.h"
+#include "stream_diag.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -99,7 +100,9 @@ void wiiu_stream_init(uint32_t width, uint32_t height)
 
 void wiiu_stream_reset(void)
 {
+  uint32_t lock_start_ms = wiiu_stream_diag_now_ms();
   OSFastMutex_Lock(&queueMutex);
+  wiiu_stream_diag_log_mutex_wait("video queue reset", lock_start_ms, wiiu_stream_diag_now_ms());
   currentFrame = nextFrame = 0;
   queueReadIndex = queueWriteIndex = 0;
   droppedFrames = 0;
@@ -156,6 +159,7 @@ int wiiu_stream_draw(void)
       WHBGfxFinishRenderDRC();
 
       WHBGfxFinishRender();
+      wiiu_stream_diag_mark_rendered_frame();
       currentFrame++;
     }
     return 1;
@@ -174,7 +178,9 @@ void wiiu_stream_fini(void)
 
 void* get_frame(void)
 {
+  uint32_t lock_start_ms = wiiu_stream_diag_now_ms();
   OSFastMutex_Lock(&queueMutex);
+  wiiu_stream_diag_log_mutex_wait("video queue get", lock_start_ms, wiiu_stream_diag_now_ms());
 
   uint32_t elements_in = queueWriteIndex - queueReadIndex;
   if(elements_in == 0) {
@@ -191,7 +197,9 @@ void* get_frame(void)
 
 void add_frame(yuv_texture_t* msg)
 {
+  uint32_t lock_start_ms = wiiu_stream_diag_now_ms();
   OSFastMutex_Lock(&queueMutex);
+  wiiu_stream_diag_log_mutex_wait("video queue add", lock_start_ms, wiiu_stream_diag_now_ms());
 
   uint32_t elements_in = queueWriteIndex - queueReadIndex;
   if (elements_in == MAX_QUEUEMESSAGES) {
