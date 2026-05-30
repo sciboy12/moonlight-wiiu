@@ -1,5 +1,6 @@
 #include "../config.h"
 #include "wiiu.h"
+#include "stream_diag.h"
 
 #include <malloc.h>
 
@@ -35,33 +36,38 @@ static OSAlarm inputAlarm;
 
 // ~60 Hz
 #define INPUT_UPDATE_RATE OSMillisecondsToTicks(16)
+#define DIAG_LI_SEND(call) do { \
+  if ((call) == 0) { \
+    wiiu_stream_diag_note_enet_send(); \
+  } \
+} while (0)
 
 void handleTouch(VPADTouchData touch) {
   if (mouse_mode == MOUSE_MODE_ABSOLUTE) {
     if (touch.touched) {
-      LiSendMousePositionEvent(touch.x, touch.y, TOUCH_WIDTH, TOUCH_HEIGHT);
+      DIAG_LI_SEND(LiSendMousePositionEvent(touch.x, touch.y, TOUCH_WIDTH, TOUCH_HEIGHT));
 
       if (!touched) {
-        LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_LEFT);
+        DIAG_LI_SEND(LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_LEFT));
         touched = 1;
       }
     }
     else if (touched) {
-      LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+      DIAG_LI_SEND(LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT));
       touched = 0;
     }
   }
   else if (mouse_mode == MOUSE_MODE_TOUCHSCREEN) {
     if (touch.touched) {
       if (!touched) {
-        LiSendTouchEvent(LI_TOUCH_EVENT_DOWN, 0, (float) touch.x / TOUCH_WIDTH, (float) touch.y / TOUCH_HEIGHT, 0.0, 0.0, 0.0, 0.0);
+        DIAG_LI_SEND(LiSendTouchEvent(LI_TOUCH_EVENT_DOWN, 0, (float) touch.x / TOUCH_WIDTH, (float) touch.y / TOUCH_HEIGHT, 0.0, 0.0, 0.0, 0.0));
         touched = 1;
       } else {
-        LiSendTouchEvent(LI_TOUCH_EVENT_MOVE, 0, (float) touch.x / TOUCH_WIDTH, (float) touch.y / TOUCH_HEIGHT, 0.0, 0.0, 0.0, 0.0);
+        DIAG_LI_SEND(LiSendTouchEvent(LI_TOUCH_EVENT_MOVE, 0, (float) touch.x / TOUCH_WIDTH, (float) touch.y / TOUCH_HEIGHT, 0.0, 0.0, 0.0, 0.0));
       }
     }
     else if (touched) {
-      LiSendTouchEvent(LI_TOUCH_EVENT_UP, 0, (float) touch.x / TOUCH_WIDTH, (float) touch.y / TOUCH_HEIGHT, 0.0, 0.0, 0.0, 0.0);
+      DIAG_LI_SEND(LiSendTouchEvent(LI_TOUCH_EVENT_UP, 0, (float) touch.x / TOUCH_WIDTH, (float) touch.y / TOUCH_HEIGHT, 0.0, 0.0, 0.0, 0.0));
       touched = 0;
     }
   }
@@ -80,8 +86,8 @@ void handleTouch(VPADTouchData touch) {
     // Just released
     if (lastTouched && !touch.touched) {
       if (millis() - touchDownMillis < TAP_MILLIS) {
-        LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_LEFT);
-        LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT);
+        DIAG_LI_SEND(LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_LEFT));
+        DIAG_LI_SEND(LiSendMouseButtonEvent(BUTTON_ACTION_RELEASE, BUTTON_LEFT));
       }
     }
 
@@ -89,7 +95,7 @@ void handleTouch(VPADTouchData touch) {
       // Holding & dragging screen, not just tapping
       if (millis() - touchDownMillis > TAP_MILLIS || touchDownMillis == 0) {
         if (touch.x != last_x || touch.y != last_y) // Don't send extra data if we don't need to
-          LiSendMouseMoveEvent(touch.x - last_x, touch.y - last_y);
+          DIAG_LI_SEND(LiSendMouseMoveEvent(touch.x - last_x, touch.y - last_y));
         last_x = touch.x;
         last_y = touch.y;
       } else {
@@ -162,11 +168,11 @@ void wiiu_input_update(void) {
       return;
     }
 
-    LiSendMultiControllerEvent(controllerNumber++, gamepad_mask, buttonFlags,
+    DIAG_LI_SEND(LiSendMultiControllerEvent(controllerNumber++, gamepad_mask, buttonFlags,
       (vpad.hold & VPAD_BUTTON_ZL) ? 0xFF : 0,
       (vpad.hold & VPAD_BUTTON_ZR) ? 0xFF : 0,
       vpad.leftStick.x * INT16_MAX, vpad.leftStick.y * INT16_MAX,
-      vpad.rightStick.x * INT16_MAX, vpad.rightStick.y * INT16_MAX);
+      vpad.rightStick.x * INT16_MAX, vpad.rightStick.y * INT16_MAX));
 
     VPADTouchData touch;
     VPADGetTPCalibratedPoint(VPAD_CHAN_0, &touch, &vpad.tpNormal);
@@ -216,11 +222,11 @@ void wiiu_input_update(void) {
           return;
         }
 
-        LiSendMultiControllerEvent(controllerNumber++, gamepad_mask, buttonFlags,
+        DIAG_LI_SEND(LiSendMultiControllerEvent(controllerNumber++, gamepad_mask, buttonFlags,
           (kpad_data.pro.hold & WPAD_PRO_TRIGGER_ZL) ? 0xFF : 0,
           (kpad_data.pro.hold & WPAD_PRO_TRIGGER_ZR) ? 0xFF : 0,
           kpad_data.pro.leftStick.x * INT16_MAX, kpad_data.pro.leftStick.y * INT16_MAX,
-          kpad_data.pro.rightStick.x * INT16_MAX, kpad_data.pro.rightStick.y * INT16_MAX);
+          kpad_data.pro.rightStick.x * INT16_MAX, kpad_data.pro.rightStick.y * INT16_MAX));
       }
       else if (kpad_data.extensionType == WPAD_EXT_CLASSIC || kpad_data.extensionType == WPAD_EXT_MPLUS_CLASSIC) {
         uint32_t btns = kpad_data.classic.hold;
@@ -261,11 +267,11 @@ void wiiu_input_update(void) {
           return;
         }
 
-        LiSendMultiControllerEvent(controllerNumber++, gamepad_mask, buttonFlags,
+        DIAG_LI_SEND(LiSendMultiControllerEvent(controllerNumber++, gamepad_mask, buttonFlags,
           (kpad_data.classic.hold & WPAD_CLASSIC_BUTTON_ZL) ? 0xFF : 0x00,
           (kpad_data.classic.hold & WPAD_CLASSIC_BUTTON_ZR) ? 0xFF : 0x00,
           kpad_data.classic.leftStick.x * INT16_MAX, kpad_data.classic.leftStick.y * INT16_MAX,
-          kpad_data.classic.rightStick.x * INT16_MAX, kpad_data.classic.rightStick.y * INT16_MAX);
+          kpad_data.classic.rightStick.x * INT16_MAX, kpad_data.classic.rightStick.y * INT16_MAX));
       }
     }
   }

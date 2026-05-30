@@ -40,6 +40,7 @@
 #include <arpa/inet.h>
 
 #include "wiiu/wiiu.h"
+#include "wiiu/stream_diag.h"
 #include <whb/gfx.h>
 #include <vpad/input.h>
 #include <coreinit/thread.h>
@@ -162,7 +163,7 @@ int main(int argc, char* argv[]) {
   }
   else {
     char host_config_file[PATH_MAX];
-    snprintf(host_config_file, PATH_MAX, "/vol/external01/moonlight/hosts/%s.conf", config.address);
+    snprintf(host_config_file, PATH_MAX, WIIU_MOONLIGHT_SD_PATH "/hosts/%s.conf", config.address);
     if (access(host_config_file, R_OK) != -1)
       config_file_parse(host_config_file, &config);
     
@@ -379,7 +380,9 @@ int main(int argc, char* argv[]) {
       case STATE_STOP_STREAM: {
         stop_input_thread();
         LiStopConnection();
-        wiiu_stream_reset();
+        wiiu_stream_diag_dump_state();
+        wiiu_stream_reset_queue();
+        wiiu_stream_diag_close();
 
         if (config.quitappafter) {
           if (config.debug_level > 0)
@@ -401,6 +404,8 @@ int main(int argc, char* argv[]) {
   Font_Deinit();
 
   wiiu_stream_fini();
+
+  wiiu_stream_diag_close();
 
   wiiu_net_shutdown();
 

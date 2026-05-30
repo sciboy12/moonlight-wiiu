@@ -25,6 +25,7 @@
 
 #ifdef __WIIU__
 #include "wiiu/wiiu.h"
+#include "wiiu/stream_diag.h"
 #endif
 
 #ifdef HAVE_SDL
@@ -37,6 +38,9 @@ ConnListenerSetMotionEventState set_motion_event_state_handler = NULL;
 ConnListenerSetControllerLED set_controller_led_handler = NULL;
 
 static void connection_terminated(int errorCode) {
+#ifdef __WIIU__
+  wiiu_stream_diag_dump_state();
+#endif
   switch (errorCode) {
   case ML_ERROR_GRACEFUL_TERMINATION:
     printf("Connection has been terminated gracefully.\n");
@@ -94,6 +98,10 @@ static void connection_terminated(int errorCode) {
 }
 
 static void connection_log_message(const char* format, ...) {
+#ifdef __WIIU__
+  wiiu_stream_diag_note_connection_log(format);
+#endif
+
   va_list arglist;
   va_start(arglist, format);
   vprintf(format, arglist);
@@ -101,26 +109,41 @@ static void connection_log_message(const char* format, ...) {
 }
 
 static void rumble(unsigned short controllerNumber, unsigned short lowFreqMotor, unsigned short highFreqMotor) {
+#ifdef __WIIU__
+  wiiu_stream_diag_note_control_packet();
+#endif
   if (rumble_handler)
     rumble_handler(controllerNumber, lowFreqMotor, highFreqMotor);
 }
 
 static void rumble_triggers(unsigned short controllerNumber, unsigned short leftTrigger, unsigned short rightTrigger) {
+#ifdef __WIIU__
+  wiiu_stream_diag_note_control_packet();
+#endif
   if (rumble_triggers_handler)
     rumble_triggers_handler(controllerNumber, leftTrigger, rightTrigger);
 }
 
 static void set_motion_event_state(unsigned short controllerNumber, unsigned char motionType, unsigned short reportRateHz) {
+#ifdef __WIIU__
+  wiiu_stream_diag_note_control_packet();
+#endif
   if (set_motion_event_state_handler)
     set_motion_event_state_handler(controllerNumber, motionType, reportRateHz);
 }
 
 static void set_controller_led(unsigned short controllerNumber, unsigned char r, unsigned char g, unsigned char b) {
+#ifdef __WIIU__
+  wiiu_stream_diag_note_control_packet();
+#endif
   if (set_controller_led_handler)
     set_controller_led_handler(controllerNumber, r, g, b);
 }
 
 static void connection_status_update(int status) {
+#ifdef __WIIU__
+  wiiu_stream_diag_note_control_packet();
+#endif
   switch (status) {
     case CONN_STATUS_OKAY:
       printf("Connection is okay\n");

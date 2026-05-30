@@ -18,6 +18,7 @@
  */
 
 #include "wiiu.h"
+#include "stream_diag.h"
 
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_audio.h>
@@ -77,6 +78,7 @@ static void sdl_renderer_cleanup() {
 }
 
 static void sdl_renderer_decode_and_play_sample(char* data, int length) {
+  wiiu_stream_diag_note_audio_packet();
   int decodeLen = opus_multistream_decode(decoder, data, length, pcmBuffer, samplesPerFrame, 0);
   if (decodeLen > 0) {
     SDL_QueueAudio(dev, pcmBuffer, decodeLen * channelCount * sizeof(short));
