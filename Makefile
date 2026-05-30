@@ -64,6 +64,7 @@ CXXFLAGS	:= $(CFLAGS)
 
 ASFLAGS	:=	$(ARCH)
 LDFLAGS	=	$(ARCH) $(RPXSPECS) -Wl,-Map,$(notdir $*.map)
+LDFLAGS	+=	-Wl,--wrap=recv -Wl,--wrap=recvfrom -Wl,--wrap=send -Wl,--wrap=sendto -Wl,--wrap=enet_host_service
 
 LIBS	:= -lfreetype -lpng -lbz2 -lcurl -lbrotlidec -lbrotlicommon -lmbedtls -lmbedx509 -lmbedcrypto -lSDL2 -lopus -lexpat -lz -lwut -lm
 

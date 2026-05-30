@@ -111,7 +111,6 @@ static void connection_log_message(const char* format, ...) {
 static void rumble(unsigned short controllerNumber, unsigned short lowFreqMotor, unsigned short highFreqMotor) {
 #ifdef __WIIU__
   wiiu_stream_diag_note_control_packet();
-  wiiu_stream_diag_note_enet_receive();
 #endif
   if (rumble_handler)
     rumble_handler(controllerNumber, lowFreqMotor, highFreqMotor);
@@ -120,7 +119,6 @@ static void rumble(unsigned short controllerNumber, unsigned short lowFreqMotor,
 static void rumble_triggers(unsigned short controllerNumber, unsigned short leftTrigger, unsigned short rightTrigger) {
 #ifdef __WIIU__
   wiiu_stream_diag_note_control_packet();
-  wiiu_stream_diag_note_enet_receive();
 #endif
   if (rumble_triggers_handler)
     rumble_triggers_handler(controllerNumber, leftTrigger, rightTrigger);
@@ -129,7 +127,6 @@ static void rumble_triggers(unsigned short controllerNumber, unsigned short left
 static void set_motion_event_state(unsigned short controllerNumber, unsigned char motionType, unsigned short reportRateHz) {
 #ifdef __WIIU__
   wiiu_stream_diag_note_control_packet();
-  wiiu_stream_diag_note_enet_receive();
 #endif
   if (set_motion_event_state_handler)
     set_motion_event_state_handler(controllerNumber, motionType, reportRateHz);
@@ -138,7 +135,6 @@ static void set_motion_event_state(unsigned short controllerNumber, unsigned cha
 static void set_controller_led(unsigned short controllerNumber, unsigned char r, unsigned char g, unsigned char b) {
 #ifdef __WIIU__
   wiiu_stream_diag_note_control_packet();
-  wiiu_stream_diag_note_enet_receive();
 #endif
   if (set_controller_led_handler)
     set_controller_led_handler(controllerNumber, r, g, b);
@@ -147,7 +143,6 @@ static void set_controller_led(unsigned short controllerNumber, unsigned char r,
 static void connection_status_update(int status) {
 #ifdef __WIIU__
   wiiu_stream_diag_note_control_packet();
-  wiiu_stream_diag_note_enet_receive();
 #endif
   switch (status) {
     case CONN_STATUS_OKAY:

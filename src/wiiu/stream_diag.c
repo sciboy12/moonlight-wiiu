@@ -11,6 +11,10 @@
 static FILE* diagLog;
 static uint64_t streamStartTicks;
 static uint64_t lastDumpTicks;
+static uint64_t lastVideoRecvTicks;
+static uint64_t lastAudioRecvTicks;
+static uint64_t lastControlRecvTicks;
+static uint64_t lastSocketSendTicks;
 static uint64_t lastVideoPacketTicks;
 static uint64_t lastAudioPacketTicks;
 static uint64_t lastControlPacketTicks;
@@ -24,6 +28,10 @@ static uint32_t dequeuedFrames;
 static uint32_t emptyFramePolls;
 static uint32_t droppedFrameEvents;
 static uint32_t mutexWaitEvents;
+static uint32_t videoRecvCount;
+static uint32_t audioRecvCount;
+static uint32_t controlRecvCount;
+static uint32_t socketSendCount;
 static uint32_t videoPacketCount;
 static uint32_t audioPacketCount;
 static uint32_t controlPacketCount;
@@ -73,6 +81,10 @@ void wiiu_stream_diag_reset(void)
 
   streamStartTicks = OSGetTime();
   lastDumpTicks = 0;
+  lastVideoRecvTicks = 0;
+  lastAudioRecvTicks = 0;
+  lastControlRecvTicks = 0;
+  lastSocketSendTicks = 0;
   lastVideoPacketTicks = 0;
   lastAudioPacketTicks = 0;
   lastControlPacketTicks = 0;
@@ -86,6 +98,10 @@ void wiiu_stream_diag_reset(void)
   emptyFramePolls = 0;
   droppedFrameEvents = 0;
   mutexWaitEvents = 0;
+  videoRecvCount = 0;
+  audioRecvCount = 0;
+  controlRecvCount = 0;
+  socketSendCount = 0;
   videoPacketCount = 0;
   audioPacketCount = 0;
   controlPacketCount = 0;
@@ -113,9 +129,13 @@ void wiiu_stream_diag_dump(uint32_t currentFrame,
   if (lastDumpTicks != 0) {
     print_age("previous dump", lastDumpTicks);
   }
-  print_age("last received video packet", lastVideoPacketTicks);
-  print_age("last received audio packet", lastAudioPacketTicks);
-  print_age("last received control packet", lastControlPacketTicks);
+  print_age("last successful video recv", lastVideoRecvTicks);
+  print_age("last successful audio recv", lastAudioRecvTicks);
+  print_age("last successful control recv", lastControlRecvTicks);
+  print_age("last successful socket send", lastSocketSendTicks);
+  print_age("last video callback entry", lastVideoPacketTicks);
+  print_age("last audio callback entry", lastAudioPacketTicks);
+  print_age("last control callback entry", lastControlPacketTicks);
   print_age("last successful ENet send", lastEnetSendTicks);
   print_age("last successful ENet receive", lastEnetReceiveTicks);
   print_age("last frame decoded", lastFrameDecodedTicks);
@@ -127,7 +147,9 @@ void wiiu_stream_diag_dump(uint32_t currentFrame,
               queueReadIndex, queueWriteIndex, queuedFrames);
   diag_printf("  totals: enqueued=%u dequeued=%u empty-polls=%u dropped-events=%u dropped-frames=%u\n",
               enqueuedFrames, dequeuedFrames, emptyFramePolls, droppedFrameEvents, droppedFrames);
-  diag_printf("  packets: video=%u audio=%u control=%u enet-send=%u enet-recv=%u\n",
+  diag_printf("  recv: video=%u audio=%u control=%u socket-send=%u\n",
+              videoRecvCount, audioRecvCount, controlRecvCount, socketSendCount);
+  diag_printf("  callbacks: video=%u audio=%u control=%u enet-send=%u enet-recv=%u\n",
               videoPacketCount, audioPacketCount, controlPacketCount, enetSendCount, enetReceiveCount);
   diag_printf("  failures: audio-recovery=%u enet-send=%u\n",
               audioRecoveryFailures, enetSendFailures);
@@ -190,6 +212,30 @@ void wiiu_stream_diag_note_frame_empty(void)
 void wiiu_stream_diag_note_frame_dropped(void)
 {
   droppedFrameEvents++;
+}
+
+void wiiu_stream_diag_note_video_recv(void)
+{
+  lastVideoRecvTicks = OSGetTime();
+  videoRecvCount++;
+}
+
+void wiiu_stream_diag_note_audio_recv(void)
+{
+  lastAudioRecvTicks = OSGetTime();
+  audioRecvCount++;
+}
+
+void wiiu_stream_diag_note_control_recv(void)
+{
+  lastControlRecvTicks = OSGetTime();
+  controlRecvCount++;
+}
+
+void wiiu_stream_diag_note_socket_send(void)
+{
+  lastSocketSendTicks = OSGetTime();
+  socketSendCount++;
 }
 
 void wiiu_stream_diag_note_video_packet(void)
