@@ -177,6 +177,7 @@ int wiiu_stream_draw(void)
 
       WHBGfxFinishRender();
       currentFrame++;
+      wiiu_stream_diag_note_frame_rendered();
     }
     return 1;
   }

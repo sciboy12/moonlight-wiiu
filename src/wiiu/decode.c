@@ -1,4 +1,5 @@
 #include "wiiu.h"
+#include "stream_diag.h"
 
 #include <sps.h>
 
@@ -162,6 +163,7 @@ static void wiiu_decoder_cleanup() {
 }
 
 static int wiiu_decoder_submit_decode_unit(PDECODE_UNIT decodeUnit) {
+  wiiu_stream_diag_note_video_packet();
   if (decodeUnit->fullLength > DECODER_BUFFER_SIZE) {
     fprintf(stderr, "Video decode buffer too small (%u > %u)\n",
             decodeUnit->fullLength, DECODER_BUFFER_SIZE);
@@ -189,6 +191,8 @@ static int wiiu_decoder_submit_decode_unit(PDECODE_UNIT decodeUnit) {
     printf("h264_wiiu: Error decoding frame 0x%07X\n", res);
     return DR_NEED_IDR;
   }
+
+  wiiu_stream_diag_note_frame_decoded();
 
   nextFrame++;
 
