@@ -33,7 +33,9 @@ extern char message_buffer[1024];
 void wiiu_stream_init(uint32_t width, uint32_t height);
 int wiiu_stream_draw(void);
 void wiiu_stream_reset(void);
+void wiiu_stream_reset_queue(void);
 void wiiu_stream_fini(void);
+void wiiu_stream_diag_dump_state(void);
 void wiiu_setup_renderstate(void);
 
 #define NUM_BUFFERS 8

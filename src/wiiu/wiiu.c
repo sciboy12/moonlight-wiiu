@@ -1,4 +1,5 @@
 #include "wiiu.h"
+#include "stream_diag.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -8,6 +9,7 @@
 #include <whb/proc.h>
 #include <whb/gfx.h>
 #include <coreinit/fastmutex.h>
+#include <coreinit/time.h>
 #include <gx2/mem.h>
 #include <gx2/draw.h>
 #include <gx2/registers.h>
@@ -34,6 +36,13 @@ static yuv_texture_t* queueMessages[MAX_QUEUEMESSAGES];
 static uint32_t queueWriteIndex;
 static uint32_t queueReadIndex;
 static uint32_t droppedFrames;
+
+static void lock_queue_mutex(const char* caller)
+{
+  uint64_t startTicks = OSGetTime();
+  OSFastMutex_Lock(&queueMutex);
+  wiiu_stream_diag_log_mutex_wait(caller, OSGetTime() - startTicks);
+}
 
 void wiiu_stream_init(uint32_t width, uint32_t height)
 {
@@ -97,13 +106,24 @@ void wiiu_stream_init(uint32_t width, uint32_t height)
   GX2Invalidate(GX2_INVALIDATE_MODE_CPU_ATTRIBUTE_BUFFER, drcAttribs, ATTRIB_SIZE);
 }
 
-void wiiu_stream_reset(void)
+static void reset_stream_queue(void)
 {
-  OSFastMutex_Lock(&queueMutex);
+  lock_queue_mutex("stream reset");
   currentFrame = nextFrame = 0;
   queueReadIndex = queueWriteIndex = 0;
   droppedFrames = 0;
   OSFastMutex_Unlock(&queueMutex);
+}
+
+void wiiu_stream_reset(void)
+{
+  wiiu_stream_diag_reset();
+  reset_stream_queue();
+}
+
+void wiiu_stream_reset_queue(void)
+{
+  reset_stream_queue();
 }
 
 int wiiu_stream_draw(void)
@@ -164,6 +184,13 @@ int wiiu_stream_draw(void)
   return 0;
 }
 
+void wiiu_stream_diag_dump_state(void)
+{
+  lock_queue_mutex("diagnostic dump");
+  wiiu_stream_diag_dump(currentFrame, nextFrame, queueReadIndex, queueWriteIndex, droppedFrames);
+  OSFastMutex_Unlock(&queueMutex);
+}
+
 void wiiu_stream_fini(void)
 {
   free(tvAttribs);
@@ -174,10 +201,11 @@ void wiiu_stream_fini(void)
 
 void* get_frame(void)
 {
-  OSFastMutex_Lock(&queueMutex);
+  lock_queue_mutex("get frame");
 
   uint32_t elements_in = queueWriteIndex - queueReadIndex;
   if(elements_in == 0) {
+    wiiu_stream_diag_note_frame_empty();
     OSFastMutex_Unlock(&queueMutex);
     return NULL; // framequeue is empty
   }
@@ -185,25 +213,29 @@ void* get_frame(void)
   uint32_t i = (queueReadIndex)++ & (MAX_QUEUEMESSAGES - 1);
   yuv_texture_t* message = queueMessages[i];
 
+  wiiu_stream_diag_note_frame_dequeued();
+
   OSFastMutex_Unlock(&queueMutex);
   return message;
 }
 
 void add_frame(yuv_texture_t* msg)
 {
-  OSFastMutex_Lock(&queueMutex);
+  lock_queue_mutex("add frame");
 
   uint32_t elements_in = queueWriteIndex - queueReadIndex;
   if (elements_in == MAX_QUEUEMESSAGES) {
     // Queue is full, drop the oldest frame so we can keep the latest decode output.
     queueReadIndex++;
+    wiiu_stream_diag_note_frame_dropped();
     if ((++droppedFrames % 120) == 0) {
-      printf("Video frame queue overflow (%u drops). Dropping old frames to keep stream responsive.\n", droppedFrames);
+      wiiu_stream_diag_log_queue_overflow(droppedFrames);
     }
   }
 
   uint32_t i = (queueWriteIndex)++ & (MAX_QUEUEMESSAGES - 1);
   queueMessages[i] = msg;
+  wiiu_stream_diag_note_frame_enqueued();
 
   OSFastMutex_Unlock(&queueMutex);
 }
